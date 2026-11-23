@@ -1,6 +1,7 @@
 type Point3 = [number, number, number]
 type Point2 = [number, number]
 type Palette = [string, string, string]
+import type { ClusterTopicId } from './model'
 
 const palettes: Record<string, Palette> = {
   board: ['#e4ebe8', '#c6d4cd', '#b1c3ba'],
@@ -159,8 +160,45 @@ export function createScene(): string {
       <title>PCI Express</title>
     </g>
     <g class="motion-layer" aria-hidden="true">${transferLinks.map(connection => line(connection.vertices as Point3[], 'transfer-flow', `data-flow="${connection.id}"`)).join('')}</g>
+    <g class="buffer-markers" aria-hidden="true">
+      <g class="host-marker host-marker-local"><path d="M 562 289 L 533 320" /><circle cx="562" cy="276" r="19" /><text x="562" y="284" text-anchor="middle">H</text></g>
+      <g class="host-marker host-marker-remote"><path d="M 351 185 L 322 216" /><circle cx="351" cy="172" r="19" /><text x="351" y="180" text-anchor="middle">H</text></g>
+      <g class="device-marker"><path d="M 484 463 L 461 433" /><circle cx="484" cy="477" r="19" /><text x="484" y="485" text-anchor="middle">D</text></g>
+    </g>
     <g class="diagram-scale" aria-hidden="true"><path d="M 84 484 H 153 M 84 480 V 488 M 153 480 V 488" /><text x="84" y="508">SCHEMATIC / NOT TO SCALE</text></g>
     <g class="allocation-label" aria-hidden="true"><rect x="602" y="466" width="138" height="28" rx="4" /><text x="671" y="484" text-anchor="middle">GPU 0 / ALLOCATED</text></g>
   </svg>`
   return diagram
+}
+
+function rackGlyph(horizontal: number, vertical: number, palette: string): string {
+  let contents = block(0, 0, 0, 72, 42, 74, 'frame')
+  for (let shelf = 0; shelf < 3; shelf++) {
+    contents += block(7, 43, 10 + shelf * 20, 58, 2, 13, palette)
+    const [indicatorHorizontal, indicatorVertical] = project([58, 46, 16 + shelf * 20])
+    contents += `<circle cx="${indicatorHorizontal}" cy="${indicatorVertical}" r="2" class="device-led" />`
+  }
+  return `<g transform="translate(${horizontal - 410} ${vertical - 108})">${contents}</g>`
+}
+
+export function createClusterScene(): string {
+  const families: { id: ClusterTopicId; name: string; subtitle: string; horizontal: number; palette: string }[] = [
+    { id: 'login', name: 'LOGIN', subtitle: 'Access + preparation', horizontal: 105, palette: 'network' },
+    { id: 'cpu-nodes', name: 'CPU NODES', subtitle: 'Intel / AMD', horizontal: 315, palette: 'cpu' },
+    { id: 'a30', name: 'A30 NODES', subtitle: '4 GPUs per node', horizontal: 495, palette: 'gpu' },
+    { id: 'rtx4090d', name: 'RTX 4090D', subtitle: '6 GPUs per node', horizontal: 675, palette: 'gpu' },
+    { id: 'other-gpus', name: 'L20 / RTX 5880', subtitle: 'Other GPU families', horizontal: 855, palette: 'gpu' },
+  ]
+  return `<svg class="cluster-diagram" viewBox="0 0 1000 530" xmlns="http://www.w3.org/2000/svg" aria-labelledby="cluster-title cluster-description">
+    <title id="cluster-title">HPC4 system overview, schematic connectivity</title>
+    <desc id="cluster-description">Login systems, CPU-node families, A30, RTX 4090D, and other GPU families. A shared RoCE line denotes internode connectivity, not switch wiring. Shared storage appears separately with logical file-system access, not a verified network route. Each glyph represents a family, not an individual rack or node count.</desc>
+    <text x="62" y="77" class="cluster-group-label">ACCESS</text><text x="285" y="77" class="cluster-group-label">COMPUTE NODE FAMILIES</text>
+    <path d="M 120 294 V 326 H 870 V 294" class="cluster-fabric-line" />
+    ${families.map(family => `<path d="M ${family.horizontal + 15} 259 V 326" class="cluster-family-link" data-family-link="${family.id}" />`).join('')}
+    ${families.map(family => `<g class="cluster-part" data-cluster-topic="${family.id}" role="button" tabindex="0" aria-label="${family.name === 'LOGIN' ? 'Login nodes' : family.id === 'a30' ? 'A30 compute nodes' : family.id === 'rtx4090d' ? 'RTX 4090D compute nodes' : family.id === 'cpu-nodes' ? 'CPU compute nodes' : 'Other GPU compute nodes'}" aria-pressed="false"><title>${family.name}</title>${rackGlyph(family.horizontal, 196, family.palette)}<text x="${family.horizontal + 15}" y="268" text-anchor="middle" class="cluster-part-name">${family.name}</text><text x="${family.horizontal + 15}" y="285" text-anchor="middle" class="cluster-part-detail">${family.subtitle}</text>${family.id === 'a30' ? '<text x="510" y="111" text-anchor="middle" class="cluster-detail-marker">DETAIL SCENE</text>' : ''}</g>`).join('')}
+    <g class="cluster-part fabric-subject" data-cluster-topic="fabric" role="button" tabindex="0" aria-label="Internode fabric, 200 Gbps RoCE" aria-pressed="false"><rect x="354" y="309" width="291" height="34" rx="4" /><text x="500" y="330" text-anchor="middle" class="cluster-fabric-text">200 Gbps RoCE / internode fabric</text></g>
+    <path d="M 510 355 V 387" class="storage-access-link" /><text x="527" y="377" class="cluster-access-label">SHARED FILE-SYSTEM ACCESS</text>
+    <g class="cluster-part storage-subject" data-cluster-topic="storage" role="button" tabindex="0" aria-label="Shared storage, home project and scratch" aria-pressed="false">${rackGlyph(495, 453, 'memory')}<text x="590" y="420" class="cluster-part-name">SHARED STORAGE</text><text x="590" y="441" class="cluster-part-detail">/home /project /scratch</text><text x="590" y="461" class="cluster-access-label">Storage-network route not modeled</text></g>
+    <text x="62" y="491" class="cluster-access-label">FAMILY GLYPHS / NOT AN INVENTORY OR SWITCH MAP</text>
+  </svg>`
 }

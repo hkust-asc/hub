@@ -3,125 +3,198 @@ import '@fontsource/ibm-plex-sans/500.css'
 import '@fontsource/ibm-plex-sans/600.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
-import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, Info, Layers2, MemoryStick, Microchip, Network, Pause, Play, RotateCcw, Route, Server, X } from 'lucide'
-import { evidence, initialState, stages, topics, transferPath, updateState } from './model'
-import type { Action, AppState, TopicId } from './model'
-import { createScene } from './scene'
+import { createIcons, ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, SkipBack, SkipForward, Terminal, X } from 'lucide'
+import { clusterTopics, initialState, scenarios, topics, transferPath, updateState } from './model'
+import type { Action, AppState, ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
+import { createLayout, icon } from './layout'
 
-const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, Info, Layers2, MemoryStick, Microchip, Network, Pause, Play, RotateCcw, Route, Server, X }
-const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`
+const iconSet = { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, SkipBack, SkipForward, Terminal, X }
 const app = document.querySelector<HTMLDivElement>('#app')!
-let state: AppState = { ...initialState }
-let playbackTimer: ReturnType<typeof setInterval> | undefined
-
-app.innerHTML = `
-  <header class="site-header">
-    <a class="brand" href="./" aria-label="HPC4 Anatomy home"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>anatomy</strong></span></a>
-    <div class="header-right"><span class="edition">SYSTEM STUDY 001</span><a class="handbook-link" href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">Handbook ${icon('arrow-up-right')}</a></div>
-  </header>
-  <main>
-    <div class="page-heading">
-      <div><div class="breadcrumb">HPC4 <span>/</span> Compute architecture <span>/</span> A30 node</div><h1>Inside a GPU node<span class="title-period">.</span></h1><p class="page-subtitle">The processors, memory, and paths behind a GPU computation.</p></div>
-      <button class="evidence-button" id="open-evidence" type="button">${icon('info')} <span>Illustrative topology</span> ${icon('arrow-up-right')}</button>
-    </div>
-    <section class="workbench" aria-label="GPU node explorer">
-      <div class="workbench-toolbar">
-        <div class="mode-tabs" role="tablist" aria-label="Experience"><button type="button" id="explore-tab" role="tab" aria-selected="true" aria-controls="explore-panel">${icon('box')} Explore the node</button><button type="button" id="scenario-tab" role="tab" aria-selected="false" aria-controls="scenario-panel">${icon('route')} Follow the data</button></div>
-        <div class="view-tools"><button type="button" class="tool-button" id="explode-button" aria-pressed="false" aria-label="Explode node layers" title="Explode node layers">${icon('layers-2')}</button><span class="tool-divider"></span><button type="button" class="tool-button" id="download-button" aria-label="Download diagram as SVG" title="Download diagram as SVG">${icon('arrow-down-to-line')}</button><button type="button" class="tool-button" id="reset-button" aria-label="Reset view and scenario" title="Reset view and scenario">${icon('rotate-ccw')}</button></div>
-      </div>
-      <div class="workbench-body">
-        <div class="visual-column">
-          <div class="diagram-stage" id="diagram-stage"><div class="stage-caption"><span class="figure-number">FIG. 01</span><span>A30 COMPUTE NODE</span></div><div class="stage-view-label">ISOMETRIC VIEW</div>${createScene()}<div class="stage-bottom"><span><span class="key-dot gpu-dot"></span> Accelerator <span class="key-dot cpu-dot"></span> Host <span class="key-dot memory-dot"></span> Memory</span><span class="stage-bottom-right" id="diagram-status">4 GPUs / 2 sockets</span></div></div>
-          <div class="context-strip"><span class="context-icon">${icon('git-compare-arrows')}</span><div><span class="micro-label">CPU + MEMORY PLACEMENT</span><span id="placement-description">Local to GPU 0's host path</span></div><div class="placement-control" role="group" aria-label="CPU and memory placement"><button type="button" id="local-button" aria-pressed="true">Local</button><button type="button" id="remote-button" aria-pressed="false">Cross-socket</button></div></div>
-        </div>
-        <aside class="inspector" aria-label="Component details"><div class="inspector-label"><span>COMPONENT NOTES</span><span id="topic-index">01 / 07</span></div><div id="inspector-content"></div></aside>
-      </div>
-      <div class="explore-panel" id="explore-panel" role="tabpanel" aria-labelledby="explore-tab"><div class="section-kicker">THE NODE, PART BY PART</div><div class="component-list">${(Object.entries(topics) as [TopicId, typeof topics[TopicId]][]).map(([identifier, topic]) => `<button type="button" class="component-button" data-select="${identifier}" aria-pressed="false">${icon(topic.icon)}<span>${identifier === 'gpu' ? 'GPU' : identifier === 'cpu' ? 'CPU' : identifier === 'memory' ? 'Host RAM' : identifier === 'numa' ? 'NUMA' : identifier === 'pcie' ? 'PCIe' : identifier === 'nic' ? 'Network' : 'Slurm'}</span></button>`).join('')}</div></div>
-      <div class="scenario-panel" id="scenario-panel" role="tabpanel" aria-labelledby="scenario-tab" hidden><div class="scenario-header"><div class="section-kicker">ONE EXPLICIT-COPY GPU OPERATION</div><span class="simulation-label">ILLUSTRATIVE / NOT A PERFORMANCE TRACE</span></div><div class="scenario-steps" role="group" aria-label="Scenario steps">${stages.map((stage, index) => `<button type="button" data-step="${index}" class="step-button" aria-pressed="false"><span class="step-number">${String(index + 1).padStart(2, '0')}</span><span>${stage.label}</span></button>`).join('')}</div><div class="scenario-readout"><div class="scenario-transport"><button class="play-button" type="button" id="play-button" aria-label="Play scenario" title="Play scenario">${icon('play')}</button><button class="tool-button" type="button" id="previous-button" aria-label="Previous step" title="Previous step">${icon('arrow-left')}</button><button class="tool-button" type="button" id="next-button" aria-label="Next step" title="Next step">${icon('arrow-right')}</button></div><div class="step-copy" aria-live="polite"><h2 id="step-title"></h2><p id="step-description"></p></div><div class="location-readout"><span class="micro-label">DATA / STATE</span><span id="step-location"></span></div></div></div>
-    </section>
-    <section class="node-profile" aria-label="Published hardware specification"><div class="profile-title">${icon('server')}<div><span class="micro-label">PUBLISHED PROFILE</span><span>HPC4 / A30 node</span></div></div><div class="profile-stat"><strong>2<span>x</span></strong><span>Xeon Gold 6448Y</span></div><div class="profile-stat"><strong>512<span>GB</span></strong><span>DDR5 host memory</span></div><div class="profile-stat"><strong>4<span>x A30</span></strong><span>24 GB HBM2 per GPU</span></div><a class="profile-source" href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">Hardware source ${icon('arrow-up-right')}</a></section>
-    <footer class="page-footer"><span><span class="footer-dot"></span> Educational proof of concept <span class="footer-separator">/</span> No live cluster connection</span><button type="button" id="footer-evidence">Sources & assumptions ${icon('arrow-up-right')}</button></footer>
-  </main>
-  <dialog id="evidence-dialog" aria-labelledby="evidence-title"><div class="dialog-heading"><span class="section-kicker">MODEL EVIDENCE</span><button type="button" class="tool-button" id="close-evidence" aria-label="Close sources and assumptions" title="Close">${icon('x')}</button></div><h2 id="evidence-title">What is real. What is schematic.</h2><p class="dialog-intro">Hardware facts follow the public HPC4 specification, checked ${evidence.verified}. This diagram is not an inventory of an inspected compute node.</p><h3>Published hardware</h3><ul class="evidence-list published-list">${evidence.published.map(fact => `<li>${icon('check')}<span>${fact}</span></li>`).join('')}</ul><h3>Illustrative, not verified</h3><ul class="evidence-list">${evidence.illustrative.map(fact => `<li>${icon('info')}<span>${fact}</span></li>`).join('')}</ul><p class="dialog-caveat">The scenario uses explicit copies without overlap or unified memory. Packet motion is explanatory, not measured traffic or transfer speed.</p><a class="source-link" href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">Official HPC4 specification ${icon('arrow-up-right')}</a><a class="source-link" href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">HPC handbook ${icon('arrow-up-right')}</a></dialog>
-`
+function navigationFromHash(): Action {
+  const [scene, subject] = location.hash.slice(1).split('/')
+  return scene === 'a30'
+    ? { type: 'browse', scene: 'a30', topic: subject && Object.hasOwn(topics, subject) ? subject as TopicId : undefined }
+    : { type: 'browse', scene: 'cluster', topic: subject && Object.hasOwn(clusterTopics, subject) ? subject as ClusterTopicId : undefined }
+}
+let state: AppState = updateState({ ...initialState }, navigationFromHash())
+let playbackTimer: ReturnType<typeof setTimeout> | undefined
+let renderedInspector = ''
+let renderedScene: SceneId | undefined
+let renderedScenario: ScenarioId | undefined
+const visitedScenarios = new Set<ScenarioId>()
+app.innerHTML = createLayout()
 
 function element<ElementType extends HTMLElement = HTMLElement>(identifier: string): ElementType {
   return document.getElementById(identifier) as ElementType
 }
 
-function dispatch(action: Action): void {
+function dispatch(action: Action, recordHistory = true): void {
+  const previous = state
   state = updateState(state, action)
+  if (action.type === 'start-scenario' || state.mode === 'scenario') visitedScenarios.add(state.scenario)
   render()
-  if (state.playing && !playbackTimer) playbackTimer = setInterval(() => dispatch({ type: 'tick' }), 4800)
-  if (!state.playing && playbackTimer) {
-    clearInterval(playbackTimer)
+  if (recordHistory && location.hash !== routeForState()) {
+    if (action.type === 'browse' || action.type === 'navigate') history.pushState(null, '', routeForState())
+    else history.replaceState(null, '', routeForState())
+  }
+  if (action.type === 'browse' || action.type === 'navigate') element('page-title').focus({ preventScroll: true })
+  if (state.mode === 'scenario' && (action.type === 'select' || action.type === 'cluster-select')) element('subject-picker').focus()
+  if (previous.playing !== state.playing || previous.step !== state.step || previous.scenario !== state.scenario) {
+    clearTimeout(playbackTimer)
     playbackTimer = undefined
+    if (state.playing) playbackTimer = setTimeout(() => dispatch({ type: 'tick' }), scenarios[state.scenario].steps[state.step]!.holdMs)
   }
 }
 
+function routeForState(): string {
+  const subject = state.scene === 'a30' ? state.selected : state.clusterSelected
+  const defaultSubject = state.scene === 'a30' ? 'gpu' : 'a30'
+  return `#${state.scene}${subject === defaultSubject ? '' : `/${subject}`}`
+}
+
 function render(): void {
-  const topic = topics[state.selected]
-  const activeStage = stages[state.step]!
+  const currentScenario = scenarios[state.scenario]
+  const activeStage = currentScenario.steps[state.step]!
   const scenario = state.mode === 'scenario'
-  element('explore-panel').hidden = scenario
+  const node = state.scene === 'a30'
+  const nodeStep = activeStage.nodeStep ?? -1
+  const visual = scenario && node ? activeStage.visual : undefined
+  const software = !node && ['spack', 'lmod', 'slurm'].includes(state.clusterSelected)
+  const activeNav = scenario ? state.scenario : node ? 'a30' : ['storage', 'fabric', 'spack', 'lmod', 'slurm'].includes(state.clusterSelected) ? state.clusterSelected : 'overview'
+  element('cluster-view').hidden = node
+  element('node-view').hidden = !node
+  element('workbench').classList.toggle('is-lesson', scenario)
+  element('lesson-copy').hidden = !scenario
+  element('inspection-detour').hidden = !state.inspecting
+  element<HTMLDetailsElement>('inspection-details').open = !scenario || state.inspecting
+  const title = node ? 'A30 GPU node' : software ? clusterTopics[state.clusterSelected].name : state.clusterSelected === 'storage' ? 'Shared storage' : state.clusterSelected === 'fabric' ? 'Network fabric' : 'Cluster overview'
+  element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
+  element('breadcrumb-section').textContent = scenario ? currentScenario.name : software ? 'Software' : node ? 'Compute architecture' : 'System'
+  element('scene-reference').textContent = node ? 'SCENE 01 / A30' : 'SCENE 00 / HPC4'
+  element('view-tools').hidden = !node
+  element('view-label').innerHTML = `${icon(node ? 'box' : 'network')}${node ? 'Isometric anatomy' : 'Connectivity schematic'}`
+  document.title = `HPC4 Anatomy / ${title}`
+  document.querySelectorAll<HTMLElement>('[data-nav-id]').forEach(button => {
+    const selected = button.dataset.navId === activeNav
+    if (selected) button.setAttribute('aria-current', 'page')
+    else button.removeAttribute('aria-current')
+  })
+  document.querySelectorAll<HTMLElement>('[data-bookmark]').forEach(bookmark => {
+    bookmark.textContent = bookmark.dataset.bookmark === state.scenario && visitedScenarios.has(state.scenario) ? `${state.step + 1}/${currentScenario.steps.length}` : ''
+  })
+  if (renderedScene !== state.scene) {
+    const subjects = node ? Object.entries(topics) : Object.entries(clusterTopics)
+    element('subject-picker').innerHTML = subjects.map(([identifier, subject]) => `<option value="${identifier}">${subject.name}</option>`).join('')
+    renderedScene = state.scene
+  }
+  const subjectId = node ? state.selected : state.clusterSelected
+  const subject = node ? topics[state.selected] : clusterTopics[state.clusterSelected]
+  element<HTMLSelectElement>('subject-picker').value = subjectId
+  const inspectorKey = `${state.scene}/${subjectId}`
+  if (renderedInspector !== inspectorKey) {
+    const related = node ? topics[state.selected].related.map(identifier => `<button type="button" class="text-link" data-select="${identifier}">${topics[identifier].name} ${icon('chevron-right')}</button>`).join('') : ''
+    element('inspector-content').innerHTML = `<div class="subject-heading"><span class="topic-icon ${subject.color}">${icon(subject.icon)}</span><span class="topic-eyebrow">${node ? topics[state.selected].eyebrow.split(' / ')[1] : clusterTopics[state.clusterSelected].kind}</span><h2>${subject.name}</h2></div><p class="topic-subtitle">${subject.subtitle}</p><p class="topic-description">${subject.description}</p><dl class="topic-properties">${subject.properties.map(([key, value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('')}</dl><details class="subject-notes"><summary>Why it matters ${icon('chevron-right')}</summary><p>${subject.takeaway}</p>${related ? `<div class="related-topics">${related}</div>` : ''}</details>${!node && subjectId === 'a30' ? `<button type="button" class="open-scene-button" data-browse-scene="a30">Open anatomy ${icon('arrow-right')}</button>` : ''}`
+    renderedInspector = inspectorKey
+  }
+  document.querySelectorAll<SVGElement>('[data-cluster-topic]').forEach(subjectElement => {
+    const selected = subjectElement.dataset.clusterTopic === state.clusterSelected
+    subjectElement.setAttribute('aria-pressed', String(selected))
+    subjectElement.classList.toggle('is-selected', selected)
+  })
+  element('cluster-stage').classList.toggle('storage-focused', scenario && activeStage.clusterTopic === 'storage')
+  document.querySelectorAll<SVGElement>('[data-family-link]').forEach(link => link.classList.toggle('is-active', link.dataset.familyLink === (scenario ? activeStage.clusterTopic : state.clusterSelected)))
   element('scenario-panel').hidden = !scenario
-  element('explore-tab').setAttribute('aria-selected', String(!scenario))
-  element('scenario-tab').setAttribute('aria-selected', String(scenario))
   element('explode-button').setAttribute('aria-pressed', String(state.exploded))
   element('explode-button').setAttribute('aria-label', state.exploded ? 'Assemble node layers' : 'Explode node layers')
   element('explode-button').title = state.exploded ? 'Assemble node layers' : 'Explode node layers'
   element('local-button').setAttribute('aria-pressed', String(state.placement === 'local'))
   element('remote-button').setAttribute('aria-pressed', String(state.placement === 'remote'))
-  element('placement-description').textContent = state.placement === 'local' ? "Local to GPU 0's host path" : 'An extra inter-socket crossing'
-  element('diagram-status').textContent = scenario ? `${String(state.step + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')} ${activeStage.label.toUpperCase()}` : '4 GPUs / 2 sockets'
-  element('topic-index').textContent = `${String(Object.keys(topics).indexOf(state.selected) + 1).padStart(2, '0')} / 07`
-  element('inspector-content').innerHTML = `<div class="topic-icon ${topic.color}">${icon(topic.icon)}</div><div class="topic-eyebrow">${topic.eyebrow}</div><h2>${topic.name}</h2><p class="topic-subtitle">${topic.subtitle}</p><p class="topic-description">${topic.description}</p><dl class="topic-properties">${topic.properties.map(([key, value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('')}</dl><div class="takeaway"><span class="micro-label">THE IMPORTANT DISTINCTION</span><p>${topic.takeaway}</p></div><div class="related-topics"><span class="micro-label">CONNECTED IDEAS</span><div>${topic.related.map(identifier => `<button type="button" data-select="${identifier}">${identifier === 'numa' ? 'NUMA' : identifier === 'pcie' ? 'PCIe' : identifier === 'gpu' ? 'GPU' : identifier === 'cpu' ? 'CPU' : identifier === 'memory' ? 'Host RAM' : identifier === 'nic' ? 'Network' : 'Slurm'} ${icon('chevron-right')}</button>`).join('')}</div></div>`
-  document.querySelectorAll<HTMLElement>('[data-select]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.select === state.selected)))
   const diagram = element('diagram-stage')
+  diagram.querySelector('svg')!.setAttribute('viewBox', scenario ? '20 90 850 480' : '0 0 900 570')
   diagram.classList.toggle('is-exploded', state.exploded)
   diagram.classList.toggle('is-scenario', scenario)
-  diagram.classList.toggle('is-allocated', scenario && state.step < stages.length - 1)
-  diagram.classList.toggle('is-computing', scenario && state.step === 3)
+  diagram.classList.toggle('has-buffer-state', Boolean(visual))
+  diagram.classList.toggle('is-playing', state.playing)
+  diagram.classList.toggle('is-allocated', visual?.allocated === true)
+  diagram.classList.toggle('is-computing', visual?.computing === true)
   diagram.classList.toggle('remote-placement', state.placement === 'remote')
   diagram.classList.toggle('show-locality', state.selected === 'numa' || scenario && state.placement === 'remote')
   diagram.dataset.stage = String(state.step)
   diagram.querySelectorAll<SVGElement>('[data-topic]').forEach(part => {
-    const selected = part.dataset.topic === state.selected
+    const selected = (!scenario || state.inspecting) && part.dataset.topic === state.selected
+    const focused = visual && (visual.focus.includes('host') && part.classList.contains(state.placement === 'local' ? 'bank-1' : 'bank-0') || visual.focus.includes('device') && part.classList.contains('gpu-0'))
+    part.classList.toggle('is-lesson-focus', Boolean(focused))
     part.classList.toggle('is-selected', selected)
     part.setAttribute('aria-pressed', String(selected))
   })
   diagram.querySelectorAll<SVGElement>('[data-annotation]').forEach(annotation => annotation.classList.toggle('is-selected', annotation.dataset.annotation === state.selected))
-  const activeLinks = scenario ? transferPath(state.step, state.placement) : []
+  const activeLinks = scenario && node ? transferPath(nodeStep, state.placement) : []
   diagram.querySelectorAll<SVGElement>('[data-link]').forEach(connection => connection.classList.toggle('is-active', activeLinks.includes(connection.dataset.link as typeof activeLinks[number])))
   diagram.querySelectorAll<SVGElement>('[data-flow]').forEach(flow => {
     flow.classList.toggle('is-active', activeLinks.includes(flow.dataset.flow as typeof activeLinks[number]))
-    flow.classList.toggle('is-reversed', state.step === 4)
+    flow.classList.toggle('is-reversed', visual?.transfer === 'd2h')
   })
+  element('buffer-ledger').hidden = !visual
+  if (visual) {
+    element('host-buffer-state').textContent = visual.host
+    element('device-buffer-state').textContent = visual.device
+    element('host-buffer').classList.toggle('is-focused', visual.focus.includes('host'))
+    element('device-buffer').classList.toggle('is-focused', visual.focus.includes('device'))
+    const route = state.placement === 'remote' ? 'cross-socket + PCIe' : 'PCIe'
+    element('transfer-caption').textContent = visual.transfer
+      ? `${visual.transfer === 'h2d' ? 'H -> D / Host to device' : 'D -> H / Device to host'} / ${route} / State after copy`
+      : visual.computing ? 'GPU computes here; no host/device copy. State after kernel.'
+        : visual.allocated ? 'No host/device copy in this step.' : 'Program exited; no persistent output modeled.'
+  }
   element('step-title').textContent = activeStage.title
   element('step-description').textContent = activeStage.description
-  element('step-location').textContent = activeStage.location
-  document.querySelectorAll<HTMLElement>('[data-step]').forEach(button => {
-    const buttonStep = Number(button.dataset.step)
-    button.setAttribute('aria-pressed', String(buttonStep === state.step))
-    button.classList.toggle('is-complete', buttonStep < state.step)
-    if (buttonStep === state.step) button.setAttribute('aria-current', 'step')
-    else button.removeAttribute('aria-current')
-  })
+  element('scenario-title').textContent = currentScenario.name
+  element('step-count').textContent = `${String(state.step + 1).padStart(2, '0')} / ${String(currentScenario.steps.length).padStart(2, '0')}  ${activeStage.label}`
+  element('step-command').hidden = !activeStage.command
+  element('step-command').textContent = activeStage.command ?? ''
+  element('lesson-location').textContent = `${String(state.step + 1).padStart(2, '0')} / ${activeStage.location}`
+  element('playback-status').textContent = state.playing ? 'Auto-advance on' : state.inspecting ? 'Paused for inspection' : 'Your pace / Next when ready'
+  if (renderedScenario !== state.scenario) {
+    element('step-picker').innerHTML = currentScenario.steps.map((step, index) => `<option value="${index}">${index + 1}. ${step.label}</option>`).join('')
+    renderedScenario = state.scenario
+  }
+  element<HTMLSelectElement>('step-picker').value = String(state.step)
+  const range = element<HTMLInputElement>('step-range')
+  range.max = String(currentScenario.steps.length - 1)
+  range.value = String(state.step)
+  range.setAttribute('aria-valuetext', `Step ${state.step + 1} of ${currentScenario.steps.length}: ${activeStage.label}`)
+  range.style.setProperty('--progress', `${state.step / (currentScenario.steps.length - 1) * 100}%`)
   element<HTMLButtonElement>('previous-button').disabled = state.step === 0
-  element<HTMLButtonElement>('next-button').disabled = state.step === stages.length - 1
+  element<HTMLButtonElement>('next-button').disabled = state.step === currentScenario.steps.length - 1
   const playButton = element<HTMLButtonElement>('play-button')
   playButton.innerHTML = icon(state.playing ? 'pause' : 'play')
-  playButton.setAttribute('aria-label', state.playing ? 'Pause scenario' : state.step === stages.length - 1 ? 'Replay scenario' : 'Play scenario')
-  playButton.title = playButton.getAttribute('aria-label')!
+  playButton.setAttribute('aria-label', state.playing ? 'Pause scenario' : state.step === currentScenario.steps.length - 1 ? 'Replay scenario' : 'Play scenario')
+  playButton.title = state.playing ? 'Pause automatic advancement' : 'Auto-advance at an authored reading pace'
   createIcons({ icons: iconSet, attrs: { 'stroke-width': 1.65, 'aria-hidden': 'true' } })
 }
 
 app.addEventListener('click', event => {
   const target = event.target as Element
+  const browseScene = target.closest<HTMLElement>('[data-browse-scene]')?.dataset.browseScene
+  const browseTopic = target.closest<HTMLElement>('[data-browse-topic]')?.dataset.browseTopic
+  if (browseScene === 'cluster' || browseScene === 'a30') {
+    closeNavigation()
+    dispatch(browseScene === 'cluster' ? { type: 'browse', scene: 'cluster' } : { type: 'browse', scene: 'a30' })
+  }
+  if (browseTopic && browseTopic in clusterTopics) {
+    closeNavigation()
+    dispatch({ type: 'browse', scene: 'cluster', topic: browseTopic as ClusterTopicId })
+  }
+  const selectedScenario = target.closest<HTMLElement>('[data-scenario]')?.dataset.scenario
+  if (selectedScenario === 'first-job' || selectedScenario === 'gpu-copy') {
+    closeNavigation()
+    dispatch(visitedScenarios.has(selectedScenario) && state.scenario === selectedScenario ? { type: 'mode', mode: 'scenario' } : { type: 'start-scenario', scenario: selectedScenario })
+    element('page-title').focus({ preventScroll: true })
+  }
+  const clusterTopic = target.closest<SVGElement>('[data-cluster-topic]')?.dataset.clusterTopic
+  if (clusterTopic && clusterTopic in clusterTopics) dispatch({ type: 'cluster-select', topic: clusterTopic as ClusterTopicId })
   const topic = target.closest<HTMLElement>('[data-select]')?.dataset.select ?? target.closest<SVGElement>('[data-topic]')?.dataset.topic
   if (topic && topic in topics) dispatch({ type: 'select', topic: topic as TopicId })
-  const step = target.closest<HTMLElement>('[data-step]')?.dataset.step
-  if (step !== undefined) dispatch({ type: 'step', step: Number(step) })
 })
 
 element('diagram-stage').addEventListener('keydown', event => {
@@ -133,30 +206,49 @@ element('diagram-stage').addEventListener('keydown', event => {
   }
 })
 
-element('explore-tab').addEventListener('click', () => dispatch({ type: 'mode', mode: 'explore' }))
-element('scenario-tab').addEventListener('click', () => dispatch({ type: 'mode', mode: 'scenario' }))
-document.querySelector('.mode-tabs')!.addEventListener('keydown', event => {
-  const keyboardEvent = event as KeyboardEvent
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(keyboardEvent.key)) return
-  keyboardEvent.preventDefault()
-  const scenario = keyboardEvent.key === 'End' || keyboardEvent.key !== 'Home' && state.mode === 'explore'
-  dispatch({ type: 'mode', mode: scenario ? 'scenario' : 'explore' })
-  element(scenario ? 'scenario-tab' : 'explore-tab').focus()
+element('cluster-stage').addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  const topic = (event.target as Element).closest<SVGElement>('[data-cluster-topic]')?.dataset.clusterTopic
+  if (topic && topic in clusterTopics) {
+    event.preventDefault()
+    dispatch({ type: 'cluster-select', topic: topic as ClusterTopicId })
+  }
 })
+window.addEventListener('popstate', () => dispatch(navigationFromHash(), false))
+element<HTMLSelectElement>('subject-picker').addEventListener('change', event => {
+  const subject = (event.target as HTMLSelectElement).value
+  dispatch(state.scene === 'a30' ? { type: 'select', topic: subject as TopicId } : { type: 'cluster-select', topic: subject as ClusterTopicId })
+})
+element<HTMLInputElement>('step-range').addEventListener('input', event => dispatch({ type: 'step', step: Number((event.target as HTMLInputElement).value) }))
+element<HTMLSelectElement>('step-picker').addEventListener('change', event => dispatch({ type: 'step', step: Number((event.target as HTMLSelectElement).value) }))
+element('return-to-lesson').addEventListener('click', () => {
+  dispatch({ type: 'return-to-lesson' })
+  element('step-title').focus()
+})
+element<HTMLDetailsElement>('inspection-details').addEventListener('toggle', event => {
+  if (state.mode !== 'scenario') return
+  const open = (event.target as HTMLDetailsElement).open
+  if (open === state.inspecting) return
+  dispatch(open
+    ? state.scene === 'a30' ? { type: 'select', topic: state.selected } : { type: 'cluster-select', topic: state.clusterSelected }
+    : { type: 'return-to-lesson' })
+})
+element('leave-scenario').addEventListener('click', () => dispatch({ type: 'mode', mode: 'explore' }))
+element('restart-scenario').addEventListener('click', () => dispatch({ type: 'start-scenario', scenario: state.scenario }))
 element('local-button').addEventListener('click', () => dispatch({ type: 'placement', placement: 'local' }))
 element('remote-button').addEventListener('click', () => dispatch({ type: 'placement', placement: 'remote' }))
 element('explode-button').addEventListener('click', () => dispatch({ type: 'explode' }))
-element('reset-button').addEventListener('click', () => dispatch({ type: 'reset' }))
+element('reset-button').addEventListener('click', () => dispatch({ type: 'reset-view' }))
 element('play-button').addEventListener('click', () => dispatch({ type: 'play' }))
 element('previous-button').addEventListener('click', () => dispatch({ type: 'step', step: state.step - 1 }))
 element('next-button').addEventListener('click', () => dispatch({ type: 'step', step: state.step + 1 }))
 const dialog = element<HTMLDialogElement>('evidence-dialog')
 const openEvidence = () => {
   if (state.playing) dispatch({ type: 'play' })
+  closeNavigation()
   dialog.showModal()
 }
 element('open-evidence').addEventListener('click', openEvidence)
-element('footer-evidence').addEventListener('click', openEvidence)
 element('close-evidence').addEventListener('click', () => dialog.close())
 dialog.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
@@ -173,6 +265,54 @@ dialog.addEventListener('click', event => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state.playing) dispatch({ type: 'play' })
 })
+const narrowScreen = matchMedia('(max-width: 900px)')
+const sidebar = element('sidebar')
+function closeNavigation(restoreFocus = false): void {
+  document.body.classList.remove('navigation-open')
+  element('menu-button').setAttribute('aria-expanded', 'false')
+  element('nav-backdrop').hidden = true
+  element('workspace').inert = false
+  sidebar.inert = narrowScreen.matches
+  if (narrowScreen.matches) sidebar.setAttribute('aria-hidden', 'true')
+  else sidebar.removeAttribute('aria-hidden')
+  sidebar.removeAttribute('role')
+  sidebar.removeAttribute('aria-modal')
+  if (restoreFocus && narrowScreen.matches) element('menu-button').focus()
+}
+element('menu-button').addEventListener('click', () => {
+  if (document.body.classList.contains('navigation-open')) return closeNavigation(true)
+  if (state.playing) dispatch({ type: 'play' })
+  document.body.classList.add('navigation-open')
+  element('menu-button').setAttribute('aria-expanded', 'true')
+  element('nav-backdrop').hidden = false
+  sidebar.inert = false
+  sidebar.removeAttribute('aria-hidden')
+  sidebar.setAttribute('role', 'dialog')
+  sidebar.setAttribute('aria-modal', 'true')
+  element('workspace').inert = true
+  sidebar.querySelector<HTMLElement>('[aria-current="page"], .nav-item')!.focus()
+})
+element('close-menu').addEventListener('click', () => closeNavigation(true))
+element('nav-backdrop').addEventListener('click', () => closeNavigation(true))
+sidebar.addEventListener('keydown', event => {
+  if (!narrowScreen.matches) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeNavigation(true)
+  }
+  if (event.key === 'Tab') {
+    const controls = [...sidebar.querySelectorAll<HTMLElement>('button, a')].filter(control => control.getClientRects().length > 0)
+    const target = event.shiftKey && document.activeElement === controls[0] ? controls.at(-1) : !event.shiftKey && document.activeElement === controls.at(-1) ? controls[0] : undefined
+    if (target) { event.preventDefault(); target.focus() }
+  }
+})
+narrowScreen.addEventListener('change', () => closeNavigation())
+element('brand-link').addEventListener('click', event => {
+  event.preventDefault()
+  closeNavigation()
+  dispatch({ type: 'browse', scene: 'cluster' })
+})
+closeNavigation()
 element('download-button').addEventListener('click', () => {
   const source = document.querySelector<SVGSVGElement>('.node-diagram')!
   const clone = source.cloneNode(true) as SVGSVGElement
@@ -190,10 +330,26 @@ element('download-button').addEventListener('click', () => {
     destination.removeAttribute('aria-pressed')
   })
   clone.setAttribute('width', '1200')
-  clone.setAttribute('height', '760')
+  const visual = state.mode === 'scenario' ? scenarios[state.scenario].steps[state.step]!.visual : undefined
+  clone.setAttribute('viewBox', visual ? '0 0 900 660' : '0 0 900 590')
+  clone.setAttribute('height', visual ? '880' : '787')
+  if (visual) {
+    const caption = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+    caption.setAttribute('x', '84')
+    caption.setAttribute('y', '580')
+    caption.setAttribute('fill', '#425968')
+    caption.setAttribute('font-size', '13')
+    caption.setAttribute('font-family', 'sans-serif')
+    caption.textContent = `H / Host RAM: ${visual.host}. D / GPU 0 memory: ${visual.device}.`
+    clone.append(caption)
+    const transferCaption = caption.cloneNode(true) as SVGTextElement
+    transferCaption.setAttribute('y', '605')
+    transferCaption.textContent = element('transfer-caption').textContent
+    clone.append(transferCaption)
+  }
   const note = document.createElementNS('http://www.w3.org/2000/svg', 'text')
   note.setAttribute('x', '84')
-  note.setAttribute('y', '548')
+  note.setAttribute('y', visual ? '635' : '570')
   note.setAttribute('fill', '#5e6670')
   note.setAttribute('font-size', '11')
   note.setAttribute('font-family', 'sans-serif')
@@ -208,3 +364,4 @@ element('download-button').addEventListener('click', () => {
 })
 
 render()
+history.replaceState(null, '', routeForState())
