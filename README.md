@@ -26,17 +26,18 @@ This runs the model tests and production build/type-check. Use `npm test` for mo
 - Use the left navigation, grouped into System, Software, and Scenarios. On phones it becomes a keyboard-accessible drawer.
 - Select hardware in a diagram or use the shared Inspect subject menu. Secondary explanations and related ideas are under Why it matters.
 - Open the A30 cutaway from the navigation or its subject notes. Software subjects remain distinct from physical components.
-- Choose A job through HPC4 for a ten-step cluster-to-node journey, or Host to GPU for the six-step explicit-copy operation.
-- Host to GPU is the reference storyboard: H/D markers connect the diagram to readable host/device buffer states. Copy and compute steps show the state after the operation; animated routes are explanatory, not a simulation.
-- Lessons start paused. Use Next, the scrubber, or Jump to step at your own pace; Play enables automatic advancement with per-step reading holds.
-- Inspection pauses the lesson without changing its buffer states or teaching focus. Back to this step restores the lesson subject and stays paused; Play resumes automatic advancement.
-- One player owns playback, previous/next, progress scrubbing, and restart. Return through the same scenario navigation item to resume after exploring (within the current page session).
-- Compare local and cross-socket CPU/memory placement. Changing placement pauses playback on the same step.
+- Choose **A job through HPC4** for a ten-step cluster-to-node journey. It starts paused; use Next, the scrubber, or Jump to step. Play advances automatically. In the walkthrough, **Back to this step** closes the inspector without restarting playback.
+- Return to the walkthrough from its navigation item to resume after exploring within the same page session.
+- Compare local and cross-socket CPU/memory placement. Changing placement pauses playback at the current position.
 - Separate the drawing's layers, reset the node view without rewinding the scenario, or export its SVG.
 - Open Illustrative topology for sources and assumptions. Diagram links are not a measured wiring map.
 - Scene/subject URLs such as `#cluster/lmod` and `#a30/numa` support direct links and browser Back.
 
-During a lesson, the explanation replaces the always-open reference panel. On narrow screens it appears above playback and the diagram; Inspect a subject reveals the shared reference details. SVG export remains a static diagram, with buffer captions when a GPU lesson is active, not an interactive lesson package.
+The cluster walkthrough uses the explorer's diagram and inspector. Its SVG export is a static diagram, with buffer captions when the walkthrough is inside the node.
+
+### Host to GPU
+
+Choose **Host to GPU** under **Scenarios**, or open `?lesson=host-to-gpu`. It autoplays six beats with captions next to the relevant hardware. Drag the segmented scrubber to seek to any moment, or choose a beat by name. **Inspect** pauses playback: hover or focus a part for its name and role, or select it to pin details. Leaving Inspect returns to the same moment and resumes only if the lesson was playing.
 
 The published A30 profile has two Xeon Gold 6448Y sockets, four A30 GPUs with 24 GB HBM2 each, and 512 GB DDR5 host memory. These figures and the overview's other node-family profiles come from the [official HPC4 specification](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4), checked on 2026-10-19. Storage notes follow the [official storage policies](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4/fileandstorage).
 
@@ -47,6 +48,7 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 - `src/model.ts`: subject content, evidence, scene-aware scenarios, state transitions, transfer paths.
 - `src/scene.ts`: reusable projected boxes, node cutaway, and cluster-family glyphs.
 - `src/layout.ts`: semantic workspace shell, grouped navigation, shared inspector, and scenario player.
-- `src/main.ts`: accessible controls, scenario playback, inspection, SVG export.
+- `src/main.ts`: exploration, the connected job walkthrough, inspection, and SVG export.
+- `src/host-to-gpu/`: the GPU lesson's timed beats, anchored callouts, scrubber, and inspector.
 - `src/app.css`: visual styling, responsive layout, reduced-motion behavior.
 - `tests/model.test.ts`: locality, transfer direction, cross-scene navigation, playback, and reset tests.

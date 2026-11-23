@@ -17,7 +17,11 @@ export function createLayout(): string {
         <nav class="primary-nav" aria-label="Primary navigation">
           <div class="nav-group"><h2>System</h2><button class="nav-item" type="button" data-browse-scene="cluster" data-nav-id="overview">${icon('network')}<span>Cluster overview</span></button><button class="nav-item nav-child" type="button" data-browse-scene="a30" data-nav-id="a30">${icon('microchip')}<span>A30 GPU node</span></button><button class="nav-item" type="button" data-browse-topic="storage" data-nav-id="storage">${icon('hard-drive')}<span>Shared storage</span></button><button class="nav-item" type="button" data-browse-topic="fabric" data-nav-id="fabric">${icon('route')}<span>Network fabric</span></button></div>
           <div class="nav-group"><h2>Software</h2>${(['spack', 'lmod', 'slurm'] as const).map(identifier => `<button class="nav-item" type="button" data-browse-topic="${identifier}" data-nav-id="${identifier}">${icon(clusterTopics[identifier].icon)}<span>${clusterTopics[identifier].name}</span></button>`).join('')}</div>
-          <div class="nav-group"><h2>Scenarios</h2>${Object.entries(scenarios).map(([identifier, scenario]) => `<button class="nav-item scenario-nav" type="button" data-scenario="${identifier}" data-nav-id="${identifier}">${icon('play')}<span>${scenario.name}</span><span class="scenario-bookmark" data-bookmark="${identifier}"></span></button>`).join('')}</div>
+          <div class="nav-group">
+            <h2>Scenarios</h2>
+            <a class="nav-item scenario-nav" href="?lesson=host-to-gpu">${icon('play')}<span>Host to GPU</span></a>
+            ${Object.entries(scenarios).map(([identifier, scenario]) => `<button class="nav-item scenario-nav" type="button" data-scenario="${identifier}" data-nav-id="${identifier}">${icon('play')}<span>${scenario.name}</span><span class="scenario-bookmark" data-bookmark="${identifier}"></span></button>`).join('')}
+          </div>
         </nav>
         <div class="sidebar-footer"><a href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">${icon('book-open')}<span>HPC handbook</span>${icon('arrow-up-right')}</a><span class="offline-note"><span></span>Educational model / not live</span></div>
       </aside>

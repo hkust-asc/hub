@@ -3,7 +3,7 @@ export type Placement = 'local' | 'remote'
 export type Mode = 'explore' | 'scenario'
 export type LinkId = 'memory-local' | 'memory-remote' | 'socket-link' | 'pcie-link' | 'gpu-link'
 export type SceneId = 'cluster' | 'a30'
-export type ScenarioId = 'gpu-copy' | 'first-job'
+export type ScenarioId = keyof typeof scenarios
 export type ClusterTopicId = 'login' | 'cpu-nodes' | 'a30' | 'rtx4090d' | 'other-gpus' | 'fabric' | 'storage' | 'slurm' | 'lmod' | 'spack'
 
 export interface ClusterTopic {
@@ -181,16 +181,7 @@ export interface GpuLesson {
   computing: boolean
 }
 
-export const stages = [
-  {
-    label: 'Allocate',
-    title: 'A job receives its resources.',
-    description: 'Slurm grants this example job access to GPU 0 and CPU resources. The other GPUs are not part of this example allocation.',
-    topic: 'slurm',
-    location: 'Slurm allocation',
-    holdMs: 7000,
-    visual: { host: 'No input prepared', device: 'No input copied', focus: ['device'], transfer: null, allocated: true, computing: false },
-  },
+const jobNodeSteps = [
   {
     label: 'Prepare',
     title: 'The input starts in host memory.',
@@ -227,15 +218,6 @@ export const stages = [
     holdMs: 8500,
     visual: { host: 'Result ready', device: 'Result retained', focus: ['host', 'device'], transfer: 'd2h', allocated: true, computing: false },
   },
-  {
-    label: 'Finish',
-    title: 'The job releases its allocation.',
-    description: 'The result reached host RAM in the previous step. When the program exits, its buffers and allocation are released. Saving a file is outside this example.',
-    topic: 'slurm',
-    location: 'Program exited',
-    holdMs: 9000,
-    visual: { host: 'Buffer released', device: 'Buffer released', focus: [], transfer: null, allocated: false, computing: false },
-  },
 ] as const satisfies readonly Omit<ScenarioStep, 'scene' | 'clusterTopic'>[]
 
 export interface ScenarioStep {
@@ -248,24 +230,20 @@ export interface ScenarioStep {
   clusterTopic: ClusterTopicId
   holdMs: number
   visual?: GpuLesson
-  nodeStep?: number
   command?: string
 }
-
-export const gpuSteps: readonly ScenarioStep[] = stages.map((stage, nodeStep) => ({ ...stage, scene: 'a30', clusterTopic: 'a30', nodeStep }))
 
 export const jobSteps: readonly ScenarioStep[] = [
   { label: 'Connect', title: 'Your shell starts on a login node.', description: 'SSH gives you a shell on the shared login system. The scientific computation will run somewhere else, after a compute allocation is granted.', topic: 'cpu', location: 'Login shell', scene: 'cluster', clusterTopic: 'login', holdMs: 8500, command: 'ssh <username>@hpc4.ust.hk' },
   { label: 'Environment', title: 'Select software, not a different machine.', description: 'Lmod makes an existing software installation available to a shell. Spack may have built that installation earlier. The batch script must establish or inherit the environment it needs.', topic: 'cpu', location: 'Shell environment', scene: 'cluster', clusterTopic: 'lmod', holdMs: 11000, command: 'module load <installed-module>' },
   { label: 'Submit', title: 'Send a job description to Slurm.', description: 'The batch script describes resources and commands. sbatch returns a job ID; your existing terminal remains on the login node. Waiting is compressed in this educational scenario.', topic: 'slurm', location: 'Submitted / pending', scene: 'cluster', clusterTopic: 'slurm', holdMs: 11000, command: 'sbatch gpu-job.sh' },
   { label: 'Allocate', title: 'Eligible compute resources are assigned.', description: 'This example job receives access to GPU 0 on an A30 node and host CPU resources. This is a logical allocation, not a physical data route through the scheduler.', topic: 'slurm', location: 'A30 node / allocation', scene: 'cluster', clusterTopic: 'a30', holdMs: 10000 },
-  ...gpuSteps.slice(1, 5),
+  ...jobNodeSteps.map((step): ScenarioStep => ({ ...step, scene: 'a30', clusterTopic: 'a30' })),
   { label: 'Save', title: 'The program writes its result to shared storage.', description: 'After the D2H copy, the result is in host RAM. The program now writes a file to a chosen shared path. Storage-network wiring and file-transfer timing are not modeled.', topic: 'memory', location: 'Shared output file', scene: 'cluster', clusterTopic: 'storage', holdMs: 10000 },
   { label: 'Release', title: 'The batch job ends; the file remains.', description: 'Slurm releases the allocation when the job exits. The output file remains subject to its storage location\'s retention and backup policy. The original login shell was never moved to the compute node.', topic: 'slurm', location: 'Completed / resources released', scene: 'cluster', clusterTopic: 'storage', holdMs: 11000, command: 'sacct -j <jobid>' },
 ]
 
 export const scenarios = {
-  'gpu-copy': { name: 'Host to GPU', question: 'Where does GPU input travel?', steps: gpuSteps },
   'first-job': { name: 'A job through HPC4', question: 'Where does a batch job actually run?', steps: jobSteps },
 } as const
 
@@ -304,7 +282,7 @@ export const initialState: AppState = {
   selected: 'gpu',
   scene: 'cluster',
   clusterSelected: 'a30',
-  scenario: 'gpu-copy',
+  scenario: 'first-job',
   step: 0,
   placement: 'local',
   exploded: false,
@@ -361,8 +339,7 @@ export function updateState(state: AppState, action: Action): AppState {
   }
 }
 
-export function transferPath(step: number, placement: Placement): LinkId[] {
-  const direction = stages[step]?.visual.transfer
+export function transferPath(direction: GpuLesson['transfer'], placement: Placement): LinkId[] {
   if (!direction) return []
   const path: LinkId[] = placement === 'local'
     ? ['memory-local', 'pcie-link', 'gpu-link']

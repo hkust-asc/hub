@@ -57,7 +57,6 @@ function render(): void {
   const activeStage = currentScenario.steps[state.step]!
   const scenario = state.mode === 'scenario'
   const node = state.scene === 'a30'
-  const nodeStep = activeStage.nodeStep ?? -1
   const visual = scenario && node ? activeStage.visual : undefined
   const software = !node && ['spack', 'lmod', 'slurm'].includes(state.clusterSelected)
   const activeNav = scenario ? state.scenario : node ? 'a30' : ['storage', 'fabric', 'spack', 'lmod', 'slurm'].includes(state.clusterSelected) ? state.clusterSelected : 'overview'
@@ -128,7 +127,7 @@ function render(): void {
     part.setAttribute('aria-pressed', String(selected))
   })
   diagram.querySelectorAll<SVGElement>('[data-annotation]').forEach(annotation => annotation.classList.toggle('is-selected', annotation.dataset.annotation === state.selected))
-  const activeLinks = scenario && node ? transferPath(nodeStep, state.placement) : []
+  const activeLinks = transferPath(visual?.transfer ?? null, state.placement)
   diagram.querySelectorAll<SVGElement>('[data-link]').forEach(connection => connection.classList.toggle('is-active', activeLinks.includes(connection.dataset.link as typeof activeLinks[number])))
   diagram.querySelectorAll<SVGElement>('[data-flow]').forEach(flow => {
     flow.classList.toggle('is-active', activeLinks.includes(flow.dataset.flow as typeof activeLinks[number]))
@@ -143,8 +142,7 @@ function render(): void {
     const route = state.placement === 'remote' ? 'cross-socket + PCIe' : 'PCIe'
     element('transfer-caption').textContent = visual.transfer
       ? `${visual.transfer === 'h2d' ? 'H -> D / Host to device' : 'D -> H / Device to host'} / ${route} / State after copy`
-      : visual.computing ? 'GPU computes here; no host/device copy. State after kernel.'
-        : visual.allocated ? 'No host/device copy in this step.' : 'Program exited; no persistent output modeled.'
+      : visual.computing ? 'State after the GPU kernel.' : 'No host/device copy in this step.'
   }
   element('step-title').textContent = activeStage.title
   element('step-description').textContent = activeStage.description
@@ -186,7 +184,7 @@ app.addEventListener('click', event => {
     dispatch({ type: 'browse', scene: 'cluster', topic: browseTopic as ClusterTopicId })
   }
   const selectedScenario = target.closest<HTMLElement>('[data-scenario]')?.dataset.scenario
-  if (selectedScenario === 'first-job' || selectedScenario === 'gpu-copy') {
+  if (selectedScenario === 'first-job') {
     closeNavigation()
     dispatch(visitedScenarios.has(selectedScenario) && state.scenario === selectedScenario ? { type: 'mode', mode: 'scenario' } : { type: 'start-scenario', scenario: selectedScenario })
     element('page-title').focus({ preventScroll: true })
