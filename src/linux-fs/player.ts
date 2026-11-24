@@ -1,5 +1,4 @@
-import { mountLesson } from '../timed-lesson/player'
-import type { LessonScene } from '../timed-lesson/player'
+import type { LessonOptions, LessonScene } from '../timed-lesson/player'
 import { frameAt, timeline } from './story'
 import type { FsPart } from './story'
 import './player.css'
@@ -215,11 +214,11 @@ function createScene(stage: HTMLElement): LessonScene {
   }
 }
 
-mountLesson({
-  title: 'One Tree, No Drive Letters',
-  subtitle: 'Linux directories, paths, and mount points',
+export const lesson: LessonOptions = {
+  title: 'Linux filesystem',
+  subtitle: 'Directories, paths, and mount points',
   diagramLabel: 'Interactive Linux directory tree',
   timeline,
-  footer: '<p>ASC Week 1 / example mounts</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore">Try it in Quest 1</a>',
+  footer: '<p>ASC Week 1 / example mounts</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore" target="_blank" rel="noopener noreferrer">Try it in Quest 1</a>',
   createScene,
-})
+}

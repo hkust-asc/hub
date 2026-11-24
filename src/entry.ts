@@ -1,17 +1,6 @@
-const url = new URL(location.href)
-if (url.searchParams.get('lesson') === 'gpu-copy-sol') {
-  url.searchParams.set('lesson', 'host-to-gpu')
-  history.replaceState(history.state, '', url)
-}
+import { normalizeLessonUrl } from './catalog'
 
-if (url.searchParams.get('lesson') === 'host-to-gpu') {
-  void import('./host-to-gpu/player')
-} else if (url.searchParams.get('lesson') === 'ssh-tmux') {
-  void import('./ssh-tmux/player')
-} else if (url.searchParams.get('lesson') === 'streams') {
-  void import('./streams/player')
-} else if (url.searchParams.get('lesson') === 'linux-fs') {
-  void import('./linux-fs/player')
-} else {
-  void import('./main')
-}
+const normalized = normalizeLessonUrl(location.href)
+if (normalized) history.replaceState(history.state, '', normalized)
+
+void import('./main')

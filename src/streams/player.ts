@@ -1,5 +1,4 @@
-import { mountLesson } from '../timed-lesson/player'
-import type { LessonScene } from '../timed-lesson/player'
+import type { LessonOptions, LessonScene } from '../timed-lesson/player'
 import { frameAt, timeline } from './story'
 import type { Channel, Destination, StreamPart } from './story'
 import './player.css'
@@ -206,11 +205,11 @@ function createScene(stage: HTMLElement): LessonScene {
   }
 }
 
-mountLesson({
-  title: 'Where does the output go?',
-  subtitle: 'stdout, stderr, and shell redirection',
+export const lesson: LessonOptions = {
+  title: 'Streams & redirection',
+  subtitle: 'Separating stdout and stderr',
   diagramLabel: 'Interactive output routing diagram',
   timeline,
-  footer: '<p>ASC Week 1 / demo output</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux">Try it in Quest 2</a>',
+  footer: '<p>ASC Week 1 / demo output</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux" target="_blank" rel="noopener noreferrer">Try it in Quest 2</a>',
   createScene,
-})
+}

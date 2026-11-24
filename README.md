@@ -22,14 +22,16 @@ The model tests require Node.js 22.18 or newer for native TypeScript execution.
 
 ## Explore
 
-- Use the left navigation, grouped into System, Software, and Scenarios. On phones it becomes a keyboard-accessible drawer.
+- Start at the **Concept Atlas** (`#atlas`) or use the persistent left navigation grouped by domain (**Cluster & Nodes**, **Memory, Bus & Storage**, **Software & Slurm**, **Linux & Remote**, **GPU & Scaling**) plus direct scene shortcuts. On phones it becomes a keyboard-accessible drawer.
+- Open any **Domain Hub** (`#atlas/nodes`, `#atlas/linux`, etc.) to browse associated scenes, concepts, and guided scenarios together, hover tiles to preview questions and evidence basis, or switch to **All Entries** (`#atlas/all`) to filter across current and planned items.
 - Select hardware in a diagram or use the shared Inspect subject menu. Secondary explanations and related ideas are under Why it matters.
-- Open the A30 cutaway from the navigation or its subject notes. Software subjects remain distinct from physical components.
-- **A job through HPC4** follows a batch job from login to compute and storage.
-- **Host to GPU** (`?lesson=host-to-gpu`) shows the input and result copies at each memory location. Compare **Local** and **Cross-socket** to follow different routes.
-- **SSH & tmux** (`?lesson=ssh-tmux`) compares a task run directly over SSH with the same task inside tmux, then reconnects and reads the result. It accompanies [ASC Week 1, Quest 2](https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux).
-- **Where does the output go?** (`?lesson=streams`) follows a demo passcode and diagnostics through `>` and `2>`, then asks learners to predict what appears on screen. It also accompanies Quest 2.
-- **One Tree, No Drive Letters** (`?lesson=linux-fs`) follows `pwd`, `ls -a`, relative and absolute paths, and an example of local and shared mounts. It accompanies [Quest 1](https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore).
+- Open the A30 cutaway (`#a30`) from the Atlas, navigation, or subject notes. Software subjects remain distinct from physical components.
+- **A job through HPC4** (`#scenario/first-job`) follows a batch job from login to compute and storage.
+- **Host to GPU** (`#lesson/host-to-gpu`, or `?lesson=host-to-gpu`) shows the input and result copies at each memory location. Compare **Local** and **Cross-socket** to follow different routes.
+- **SSH & tmux** (`#lesson/ssh-tmux`, or `?lesson=ssh-tmux`) compares a task run directly over SSH with the same task inside tmux, then reconnects and reads the result. It accompanies [ASC Week 1, Quest 2](https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux).
+- **Streams & redirection** (`#lesson/streams`, or `?lesson=streams`) follows a demo passcode and diagnostics through `>` and `2>`, then asks learners to predict what appears on screen. It also accompanies Quest 2.
+- **Linux filesystem** (`#lesson/linux-fs`, or `?lesson=linux-fs`) follows `pwd`, `ls -a`, relative and absolute paths, and an example of local and shared mounts. It accompanies [Quest 1](https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore).
+- Use the visual **Back** pill, **Related** entry chips, or the sidebar **Resume scenario** card to move across connected scenes and scenarios without losing your saved place.
 - The timed lessons autoplay at 1x. Choose 2x for a quicker replay, seek with the segmented timeline, or pause with **Inspect**.
 - Compare local and cross-socket CPU/memory placement.
 - Separate the drawing's layers, reset the node view without rewinding the scenario, or export its SVG.
@@ -42,6 +44,8 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 
 ## Structure
 
+- `src/catalog.ts`: domain categories, current & planned entry registry, route parsing, filtering, and Think Back navigation trail.
+- `src/glyphs.ts`: miniature isometric and schematic SVG glyphs using the shared blue/green/amber/slate palette.
 - `src/model.ts`: subject content, evidence, scene-aware scenarios, state transitions, transfer paths.
 - `src/scene.ts`: reusable projected boxes, node cutaway, and cluster-family glyphs.
 - `src/layout.ts`: semantic workspace shell, grouped navigation, shared inspector, and scenario player.

@@ -1,13 +1,191 @@
-import { clusterTopics, evidence, scenarios } from './model'
+import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForTarget } from './catalog'
+import type { CategoryDef, CategoryId, EntryDef, EntryKind } from './catalog'
+import { renderGlyph } from './glyphs'
+import { evidence } from './model'
 import { createClusterScene, createScene } from './scene'
 
 export const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`
 
+const kindBadgeSymbol: Record<EntryKind, string> = {
+  scene: '⬡',
+  subject: '◈',
+  scenario: '▶',
+  planned: '◌',
+}
+
+const kindBadgeLabel: Record<EntryKind, string> = {
+  scene: 'Scene',
+  subject: 'Concept',
+  scenario: 'Scenario',
+  planned: 'Planned',
+}
+
+export function renderEntryTile(
+  entry: EntryDef,
+  options: { index?: number; progress?: string; compact?: boolean } = {},
+): string {
+  const route = routeForTarget(entry.target)
+  const planned = entry.kind === 'planned' || !route
+  const style = options.index !== undefined ? ` style="--tile-index: ${Math.min(options.index, 7)}"` : ''
+  const tag = planned ? 'button' : 'a'
+  const attrs = planned
+    ? `type="button" aria-disabled="true"`
+    : `href="${route}" data-entry-link="${entry.id}"`
+  return `<${tag} class="entry-tile${options.compact ? ' is-compact' : ''}" ${attrs} data-preview-entry="${entry.id}" data-kind="${entry.kind}" data-tone="${entry.tone}"${style}>
+    <span class="entry-tile-frame">
+      ${renderGlyph(entry.glyph)}
+      <span class="entry-kind-badge" title="${kindBadgeLabel[entry.kind]}" aria-hidden="true">${kindBadgeSymbol[entry.kind]}</span>
+      ${options.progress ? `<span class="entry-progress-dot" title="Saved: ${options.progress}" aria-hidden="true"></span>` : ''}
+    </span>
+    <span class="entry-tile-caption">${entry.shortTitle}</span>
+  </${tag}>`
+}
+
+export function renderDomainTile(category: CategoryDef, index: number): string {
+  const catEntries = entriesForCategory(category.id)
+  const liveCount = catEntries.filter(entry => entry.kind !== 'planned').length
+  const plannedCount = catEntries.length - liveCount
+  return `<a class="domain-tile" href="#atlas/${category.id}" data-route="#atlas/${category.id}" data-preview-category="${category.id}" data-tone="${category.tone}" style="--tile-index: ${index}">
+    <span class="domain-tile-frame">
+      ${renderGlyph(category.glyph)}
+      <span class="domain-count-pill" aria-hidden="true">${liveCount}${plannedCount ? `<em>+${plannedCount}</em>` : ''}</span>
+    </span>
+    <span class="domain-tile-title">${category.shortName}</span>
+    <span class="domain-tile-meta" aria-hidden="true">${category.index} · ${liveCount} live</span>
+  </a>`
+}
+
+export function renderAtlasBody(options: {
+  mode: 'domains' | 'all'
+  query: string
+  kind: 'all' | 'scene' | 'subject' | 'scenario'
+  progressForEntry: (entryId: string) => string | undefined
+}): string {
+  const filtering = options.mode === 'all' || options.query.trim().length > 0 || options.kind !== 'all'
+  if (!filtering) {
+    const systemCats = categories.filter(cat => cat.track === 'system')
+    const workflowCats = categories.filter(cat => cat.track === 'workflow')
+    const featuredScenarios = entries.filter(entry => entry.kind === 'scenario')
+    return `
+      <div class="atlas-intro">
+        <div class="atlas-welcome">
+          <span class="atlas-welcome-glyph" data-tone="blue">${renderGlyph('cluster')}</span>
+          <div>
+            <span class="atlas-eyebrow">HPC4 &amp; ASC ANATOMY</span>
+            <h2>Select a domain to explore</h2>
+          </div>
+        </div>
+        <p class="atlas-prompt">Hover any tile to preview its mechanism and evidence basis, or open a domain hub to see scenes and guided scenarios side by side.</p>
+      </div>
+      <div class="atlas-shelves">
+        <section class="atlas-shelf" aria-label="HPC4 System Architecture">
+          <h3 class="shelf-pill"><span>HPC4 System Architecture</span></h3>
+          <div class="domain-row">
+            ${systemCats.map((cat, idx) => renderDomainTile(cat, idx)).join('')}
+          </div>
+        </section>
+        <section class="atlas-shelf" aria-label="Software, Linux and GPU Execution">
+          <h3 class="shelf-pill"><span>Environment, Remote Shell &amp; GPU Execution</span></h3>
+          <div class="domain-row">
+            ${workflowCats.map((cat, idx) => renderDomainTile(cat, idx + systemCats.length)).join('')}
+          </div>
+        </section>
+        <section class="atlas-shelf atlas-featured-shelf" aria-label="Guided Scenarios">
+          <h3 class="shelf-pill"><span>Guided Scenarios · Ready to Play</span></h3>
+          <div class="entry-row">
+            ${featuredScenarios.map((entry, idx) => renderEntryTile(entry, { index: idx, progress: options.progressForEntry(entry.id) })).join('')}
+          </div>
+        </section>
+      </div>`
+  }
+
+  const matched = filterEntries({ query: options.query, kind: options.kind })
+  if (matched.length === 0) {
+    return `<div class="atlas-empty">
+      <p>No concepts or scenarios match <strong>"${options.query.replace(/[<>&"]/g, '')}"</strong>.</p>
+      <button type="button" class="clear-filter-button" id="reset-atlas-filter">Reset filter</button>
+    </div>`
+  }
+
+  return `<div class="atlas-catalog-groups">
+    ${categories.map(cat => {
+      const groupEntries = matched.filter(entry => entry.category === cat.id)
+      if (groupEntries.length === 0) return ''
+      return `<section class="catalog-group" data-tone="${cat.tone}" aria-label="${cat.name}">
+        <div class="catalog-group-header">
+          <a class="catalog-group-link" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}">
+            <span class="catalog-group-dot"></span>
+            <span class="catalog-group-index">${cat.index}</span>
+            <h3>${cat.name}</h3>
+            ${icon('chevron-right')}
+          </a>
+          <span class="catalog-group-count">${groupEntries.filter(e => e.kind !== 'planned').length} live${groupEntries.some(e => e.kind === 'planned') ? ` · ${groupEntries.filter(e => e.kind === 'planned').length} planned` : ''}</span>
+        </div>
+        <div class="entry-row is-left">
+          ${groupEntries.map((entry, idx) => renderEntryTile(entry, { index: idx, progress: options.progressForEntry(entry.id) })).join('')}
+        </div>
+      </section>`
+    }).join('')}
+  </div>`
+}
+
+export function renderHubView(
+  categoryId: CategoryId,
+  progressForEntry: (entryId: string) => string | undefined,
+): string {
+  const cat = getCategory(categoryId)
+  const items = entriesForCategory(categoryId)
+  const exploreItems = items.filter(item => item.kind === 'scene' || item.kind === 'subject')
+  const scenarioItems = items.filter(item => item.kind === 'scenario' || item.kind === 'planned')
+  let runningIndex = 0
+  return `
+    <div class="hub-stage" data-tone="${cat.tone}">
+      <header class="hub-header">
+        <span class="hub-category-glyph" data-tone="${cat.tone}">${renderGlyph(cat.glyph)}</span>
+        <div class="hub-title-block">
+          <span class="hub-eyebrow">EXPLORING DOMAIN ${cat.index}</span>
+          <h2 id="hub-title" tabindex="-1">${cat.name}</h2>
+          <p>${cat.subtitle}</p>
+        </div>
+      </header>
+      <div class="hub-shelves">
+        ${exploreItems.length > 0 ? `<section class="hub-shelf" aria-label="Scenes and subjects">
+          <h3 class="shelf-pill"><span>Associated Scenes &amp; Concepts</span></h3>
+          <div class="entry-row">
+            ${exploreItems.map(entry => renderEntryTile(entry, { index: runningIndex++, progress: progressForEntry(entry.id) })).join('')}
+          </div>
+        </section>` : ''}
+        ${scenarioItems.length > 0 ? `<section class="hub-shelf" aria-label="Guided scenarios and roadmap">
+          <h3 class="shelf-pill"><span>${exploreItems.length > 0 ? 'Guided Scenarios &amp; Upcoming' : 'Associated Scenarios &amp; Roadmap'}</span></h3>
+          <div class="entry-row">
+            ${scenarioItems.map(entry => renderEntryTile(entry, { index: runningIndex++, progress: progressForEntry(entry.id) })).join('')}
+          </div>
+        </section>` : ''}
+      </div>
+      <aside class="hub-thesis" aria-label="Domain core concept">
+        <span class="hub-thesis-kicker">Core mental model</span>
+        <p>${cat.thesis}</p>
+      </aside>
+    </div>`
+}
+
 export function createLayout(): string {
+  const liveTotal = entries.filter(entry => entry.kind !== 'planned').length
+  const systemCats = categories.filter(cat => cat.track === 'system')
+  const workflowCats = categories.filter(cat => cat.track === 'workflow')
+  const renderSidebarCat = (cat: CategoryDef) => {
+    const liveCount = entriesForCategory(cat.id).filter(entry => entry.kind !== 'planned').length
+    return `<a class="nav-item domain-nav-item" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}" data-domain-nav="${cat.id}" data-tone="${cat.tone}">
+      <span class="domain-dot" aria-hidden="true"></span>
+      <span>${cat.shortName}</span>
+      <span class="nav-count">${liveCount}</span>
+    </a>`
+  }
+
   return `
     <a class="skip-link" href="#workspace">Skip to workspace</a>
     <header class="topbar">
-      <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#cluster" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>anatomy</strong></span></a></div>
+      <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#atlas" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>anatomy</strong></span></a></div>
       <button class="evidence-button" id="open-evidence" type="button" aria-label="Illustrative topology" title="Sources and illustrative assumptions"><span class="evidence-dot"></span><span class="evidence-label">Illustrative topology</span>${icon('info')}</button>
     </header>
     <div class="app-layout">
@@ -15,22 +193,71 @@ export function createLayout(): string {
       <aside class="sidebar" id="sidebar" aria-label="Navigation">
         <div class="drawer-heading"><span>HPC4 anatomy</span><button class="icon-button" type="button" id="close-menu" aria-label="Close navigation" title="Close navigation">${icon('x')}</button></div>
         <nav class="primary-nav" aria-label="Primary navigation">
-          <div class="nav-group"><h2>System</h2><button class="nav-item" type="button" data-browse-scene="cluster" data-nav-id="overview">${icon('network')}<span>Cluster overview</span></button><button class="nav-item nav-child" type="button" data-browse-scene="a30" data-nav-id="a30">${icon('microchip')}<span>A30 GPU node</span></button><button class="nav-item" type="button" data-browse-topic="storage" data-nav-id="storage">${icon('hard-drive')}<span>Shared storage</span></button><button class="nav-item" type="button" data-browse-topic="fabric" data-nav-id="fabric">${icon('route')}<span>Network fabric</span></button></div>
-          <div class="nav-group"><h2>Software</h2>${(['spack', 'lmod', 'slurm'] as const).map(identifier => `<button class="nav-item" type="button" data-browse-topic="${identifier}" data-nav-id="${identifier}">${icon(clusterTopics[identifier].icon)}<span>${clusterTopics[identifier].name}</span></button>`).join('')}</div>
-          <div class="nav-group"><h2>Scenarios</h2>
-            ${Object.entries(scenarios).map(([identifier, scenario]) => identifier === 'gpu-copy'
-              ? `<a class="nav-item scenario-nav" href="?lesson=host-to-gpu">${icon('play')}<span>${scenario.name}</span></a>`
-              : `<button class="nav-item scenario-nav" type="button" data-scenario="${identifier}" data-nav-id="${identifier}">${icon('play')}<span>${scenario.name}</span><span class="scenario-bookmark" data-bookmark="${identifier}"></span></button>`).join('')}
-            <a class="nav-item scenario-nav" href="?lesson=ssh-tmux">${icon('play')}<span>SSH &amp; tmux</span></a>
-            <a class="nav-item scenario-nav" href="?lesson=streams">${icon('play')}<span>Where does the output go?</span></a>
-            <a class="nav-item scenario-nav" href="?lesson=linux-fs">${icon('play')}<span>One Tree, No Drive Letters</span></a>
+          <div class="nav-group">
+            <h2>Explore</h2>
+            <a class="nav-item" href="#atlas" data-route="#atlas" data-nav-id="atlas">${icon('layout-grid')}<span>Concept Atlas</span><span class="nav-count">${liveTotal}</span></a>
+          </div>
+          <div class="nav-group">
+            <h2>HPC4 System</h2>
+            ${systemCats.map(renderSidebarCat).join('')}
+          </div>
+          <div class="nav-group">
+            <h2>Workflow &amp; Code</h2>
+            ${workflowCats.map(renderSidebarCat).join('')}
+          </div>
+          <div class="nav-group">
+            <h2>Direct Scenes</h2>
+            <button class="nav-item" type="button" data-browse-scene="cluster" data-nav-id="overview">${icon('network')}<span>Cluster schematic</span></button>
+            <button class="nav-item" type="button" data-browse-scene="a30" data-nav-id="a30">${icon('microchip')}<span>A30 node cutaway</span></button>
           </div>
         </nav>
+        <div id="resume-slot" class="resume-slot" hidden></div>
         <div class="sidebar-footer"><a href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">${icon('book-open')}<span>HPC handbook</span>${icon('arrow-up-right')}</a><span class="offline-note"><span></span>Educational model / not live</span></div>
       </aside>
       <main class="workspace" id="workspace">
-        <header class="workspace-heading"><div><div class="breadcrumb"><span>HPC4</span>${icon('chevron-right')}<span id="breadcrumb-section">System</span></div><h1 id="page-title" tabindex="-1">Cluster overview<span class="title-period">.</span></h1></div><span class="scene-reference" id="scene-reference">SCENE 00</span></header>
-        <section class="workbench" aria-label="Architecture workspace">
+        <header class="workspace-heading">
+          <div class="heading-main">
+            <div class="heading-trail">
+              <button type="button" class="think-back" id="think-back" hidden>
+                ${icon('arrow-left')}
+                <span class="think-back-glyph" id="think-back-glyph"></span>
+                <span class="think-back-label" id="think-back-label"></span>
+              </button>
+              <div class="breadcrumb" id="breadcrumb"><span>HPC4</span>${icon('chevron-right')}<span id="breadcrumb-section">Atlas</span></div>
+            </div>
+            <h1 id="page-title" tabindex="-1">Concept &amp; scenario atlas<span class="title-period">.</span></h1>
+          </div>
+          <div class="heading-aside">
+            <div class="related-strip" id="related-strip" aria-label="Related entries" hidden></div>
+            <span class="scene-reference" id="scene-reference">ATLAS / 05 DOMAINS</span>
+          </div>
+        </header>
+
+        <section class="atlas-surface" id="atlas-view" aria-label="Concept and scenario atlas">
+          <div class="atlas-toolbar">
+            <div class="segmented-pills" role="group" aria-label="Atlas view mode">
+              <button type="button" data-atlas-mode="domains" aria-pressed="true">Domains</button>
+              <button type="button" data-atlas-mode="all" aria-pressed="false">All Entries</button>
+            </div>
+            <div class="atlas-filters">
+              <div class="kind-pills" role="group" aria-label="Filter by entry kind">
+                <button type="button" data-atlas-kind="all" aria-pressed="true">All</button>
+                <button type="button" data-atlas-kind="scene" aria-pressed="false">⬡ Scenes</button>
+                <button type="button" data-atlas-kind="subject" aria-pressed="false">◈ Concepts</button>
+                <button type="button" data-atlas-kind="scenario" aria-pressed="false">▶ Scenarios</button>
+              </div>
+              <label class="atlas-search-wrap" aria-label="Filter entries">
+                ${icon('search')}
+                <input type="search" id="atlas-search" placeholder="Filter entries (numa, 2>, tmux)…" autocomplete="off" />
+              </label>
+            </div>
+          </div>
+          <div class="atlas-body" id="atlas-body"></div>
+        </section>
+
+        <section class="atlas-surface" id="hub-view" aria-label="Domain hub" hidden></section>
+
+        <section class="workbench" id="workbench" aria-label="Architecture workspace" hidden>
           <div class="visual-column">
             <div class="view-toolbar"><span class="view-label" id="view-label">${icon('network')} Connectivity schematic</span><div class="view-tools" id="view-tools"><button type="button" class="icon-button" id="explode-button" aria-pressed="false" aria-label="Explode node layers" title="Explode node layers">${icon('layers-2')}</button><button type="button" class="icon-button" id="download-button" aria-label="Download diagram as SVG" title="Download diagram as SVG">${icon('arrow-down-to-line')}</button><button type="button" class="icon-button" id="reset-button" aria-label="Reset node view" title="Reset node view">${icon('rotate-ccw')}</button></div></div>
             <div id="cluster-view"><div class="diagram-stage cluster-stage" id="cluster-stage">${createClusterScene()}</div></div>
@@ -39,8 +266,11 @@ export function createLayout(): string {
           </div>
           <aside class="inspector" aria-label="Subject details"><label class="subject-picker-label" for="subject-picker">Inspect</label><select id="subject-picker" aria-label="Inspect subject"></select><div id="inspector-content"></div></aside>
         </section>
+
+        <section class="lesson-host" id="lesson-view" aria-label="Interactive scenario" hidden></section>
       </main>
     </div>
+    <div class="entry-preview" id="entry-preview" role="tooltip" hidden></div>
     <dialog id="evidence-dialog" aria-labelledby="evidence-title"><div class="dialog-heading"><span class="section-kicker">Sources & assumptions</span><button type="button" class="icon-button" id="close-evidence" aria-label="Close sources and assumptions" title="Close">${icon('x')}</button></div><h2 id="evidence-title">What is real. What is schematic.</h2><p class="dialog-intro">Published HPC4 specifications, checked ${evidence.verified}. These scenes are not an inventory of inspected nodes or switches.</p><h3>Published hardware</h3><ul class="evidence-list published-list">${evidence.published.map(fact => `<li>${icon('check')}<span>${fact}</span></li>`).join('')}</ul><h3>Illustrative, not verified</h3><ul class="evidence-list">${evidence.illustrative.map(fact => `<li>${icon('info')}<span>${fact}</span></li>`).join('')}</ul><p class="dialog-caveat">The GPU operation uses explicit copies without overlap or unified memory. Motion is explanatory, not measured traffic or speed. Cluster glyphs represent families; shared-storage access is a logical relationship, not a measured network route.</p><a class="source-link" href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">Official HPC4 specification ${icon('arrow-up-right')}</a><a class="source-link" href="${evidence.storageSource}" target="_blank" rel="noopener noreferrer">Storage policies ${icon('arrow-up-right')}</a><a class="source-link" href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">HPC handbook ${icon('arrow-up-right')}</a></dialog>
   `
 }

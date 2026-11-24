@@ -1,8 +1,7 @@
 import { copyPath, evidence, topics } from '../model'
 import type { LinkId, Placement } from '../model'
 import { createScene } from '../scene'
-import { mountLesson } from '../timed-lesson/player'
-import type { LessonScene } from '../timed-lesson/player'
+import type { LessonOptions, LessonScene } from '../timed-lesson/player'
 import { frameAt, timeline } from './story'
 import type { Anchor } from './story'
 import './player.css'
@@ -182,15 +181,15 @@ function movePoint(circle: SVGCircleElement, point: DOMPoint): void {
   circle.setAttribute('cy', String(point.y))
 }
 
-mountLesson({
+export const lesson: LessonOptions = {
   title: 'Host to GPU',
-  subtitle: 'A30 cutaway',
+  subtitle: 'A30 cutaway · Explicit copies',
   diagramLabel: 'Interactive A30 diagram',
   timeline,
   controls: `<div class="gpu-lesson-placement" role="group" aria-label="Host RAM placement">
     <button type="button" data-gpu-placement="local" aria-pressed="true">Local</button>
     <button type="button" data-gpu-placement="remote" aria-pressed="false">Cross-socket</button>
   </div>`,
-  footer: `<p>Illustrative routes and timing</p><a href="${evidence.hardwareSource}">HPC4 specifications</a>`,
+  footer: `<p>Illustrative routes and timing</p><a href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">HPC4 specifications</a>`,
   createScene: createGpuScene,
-})
+}

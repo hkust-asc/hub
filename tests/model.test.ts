@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  activeEntryForState,
+  fallbackBackTarget,
+  filterEntries,
+  normalizeLessonUrl,
+  parseRoute,
+  popTrail,
+  pushTrail,
+} from '../src/catalog.ts'
 import { initialState, jobSteps, scenarios, stages, transferPath, updateState } from '../src/model.ts'
 import { frameAt as gpuFrameAt, timeline as gpuTimeline } from '../src/host-to-gpu/story.ts'
 import { frameAt as filesystemFrameAt, timeline as filesystemTimeline } from '../src/linux-fs/story.ts'
@@ -306,4 +315,48 @@ test('rewinding from shared mounts restores the tree before the storage reveal',
   assert.equal(earlier.mounts, 'none')
   assert.equal(earlier.showDotfile, false)
   assert.equal(earlier.cwd, 'user-home')
+})
+
+test('legacy lesson query URLs normalize into unified hash routes', () => {
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=streams'), 'https://example.org/#lesson/streams')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=gpu-copy-sol'), 'https://example.org/#lesson/host-to-gpu')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=unknown'), null)
+  assert.equal(normalizeLessonUrl('https://example.org/#a30/numa'), null)
+})
+
+test('catalog routes preserve direct scene, domain hub, and lesson links', () => {
+  assert.deepEqual(parseRoute(''), { view: 'atlas', mode: 'domains' })
+  assert.deepEqual(parseRoute('#atlas/all'), { view: 'atlas', mode: 'all' })
+  assert.deepEqual(parseRoute('#atlas/linux'), { view: 'hub', category: 'linux' })
+  assert.deepEqual(parseRoute('#a30/numa'), { view: 'workbench', scene: 'a30', nodeTopic: 'numa' })
+  assert.deepEqual(parseRoute('#cluster/lmod'), { view: 'workbench', scene: 'cluster', clusterTopic: 'lmod' })
+  assert.deepEqual(parseRoute('#lesson/ssh-tmux'), { view: 'lesson', lesson: 'ssh-tmux' })
+  assert.deepEqual(parseRoute('#scenario/first-job'), { view: 'workbench', scene: 'cluster', scenario: 'first-job' })
+})
+
+test('think-back trail deduplicates consecutive routes and falls back to owning domain', () => {
+  const atlas = { route: '#atlas', label: 'Concept Atlas', glyph: 'cluster', tone: 'slate' as const }
+  const linuxHub = { route: '#atlas/linux', label: 'Linux & Remote', glyph: 'cat-linux', tone: 'green' as const }
+  let stack = pushTrail([], atlas, '#atlas/linux')
+  stack = pushTrail(stack, atlas, '#atlas/linux')
+  assert.equal(stack.length, 1)
+  stack = pushTrail(stack, linuxHub, '#lesson/streams')
+  const popped = popTrail(stack)
+  assert.equal(popped.target?.route, '#atlas/linux')
+  assert.equal(popped.rest.length, 1)
+
+  const coldLesson = parseRoute('#lesson/streams')
+  assert.equal(fallbackBackTarget(coldLesson, initialState)?.route, '#atlas/linux')
+  const numaState = updateState(initialState, { type: 'browse', scene: 'a30', topic: 'numa' })
+  const numaRoute = parseRoute('#a30/numa')
+  assert.equal(activeEntryForState(numaRoute, numaState)?.id, 'numa-locality')
+  assert.equal(fallbackBackTarget(numaRoute, numaState)?.route, '#atlas/interconnect')
+})
+
+test('catalog filtering narrows by entry kind and multi-term search keywords', () => {
+  const stderrMatches = filterEntries({ query: 'stderr 2>' })
+  assert.ok(stderrMatches.some(entry => entry.id === 'streams'))
+  const scenesOnly = filterEntries({ kind: 'scene' })
+  assert.ok(scenesOnly.some(entry => entry.id === 'a30-node'))
+  assert.ok(scenesOnly.every(entry => entry.kind === 'scene' || entry.kind === 'planned'))
 })

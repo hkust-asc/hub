@@ -35,7 +35,7 @@ function formatTime(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-export function mountLesson(options: {
+export interface LessonOptions {
   title: string
   subtitle: string
   diagramLabel: string
@@ -43,47 +43,96 @@ export function mountLesson(options: {
   controls?: string
   footer: string
   createScene(stage: HTMLElement, pause: () => void): LessonScene
-}): void {
+}
+
+export interface LessonHost {
+  container: HTMLElement
+  initialPositionMs?: number
+  onProgress?: (positionMs: number, beatIndex: number, beatCount: number) => void
+}
+
+export interface MountedLesson {
+  pause(): void
+  destroy(): void
+}
+
+export function mountLesson(options: LessonOptions, host?: LessonHost): MountedLesson {
   const { beats, durationMs, beatAt, positionAt, update } = options.timeline
-  const app = document.querySelector<HTMLDivElement>('#app')!
-  document.title = `${options.title} / HPC4 Anatomy`
-  app.innerHTML = `
-    <main class="story-viewer">
-      <header class="story-header">
-        <a class="story-back" href="./">${icon('arrow-left')} Anatomy</a>
-        <div class="story-heading"><h1>${options.title}</h1><p>${options.subtitle}</p></div>
-        ${options.controls ? `<div class="story-options">${options.controls}</div>` : ''}
-      </header>
-      <div class="story-theater">
-        <section class="story-stage" aria-label="${options.diagramLabel}"></section>
-        <section class="story-controls" aria-label="Playback and timeline">
-          <div class="story-status"><span id="story-beat"></span><span id="story-time"></span></div>
-          <div class="story-slider">
-            <div class="story-rail" aria-hidden="true">
-              <div class="story-fill"></div>
-              ${beats.slice(1).map(beat => `<span class="story-tick" style="left: ${beat.startMs / durationMs * 100}%"></span>`).join('')}
-            </div>
-            <input type="range" aria-label="Lesson timeline" min="0" max="${durationMs}" step="1" value="0" />
+  const embedded = Boolean(host)
+  const app = host?.container ?? document.querySelector<HTMLDivElement>('#app')!
+  document.title = `HPC4 Anatomy / ${options.title}`
+  app.innerHTML = embedded
+    ? `<div class="story-viewer story-embedded">
+        <div class="story-theater">
+          <div class="story-bar">
+            <span class="story-bar-label">${options.subtitle}</span>
+            ${options.controls ? `<div class="story-options">${options.controls}</div>` : ''}
           </div>
-          <div class="story-beats" style="grid-template-columns: ${beats.map(beat => `${beat.durationMs}fr`).join(' ')}">
-            ${beats.map(beat => `<button type="button" title="${beat.label} at ${formatTime(beat.startMs)}" aria-label="Jump to ${beat.label}">${beat.label}</button>`).join('')}
-          </div>
-          <div class="story-transport" role="group" aria-label="Playback controls">
-            <button type="button" id="story-inspect" aria-pressed="false" title="Pause and identify parts">${icon('search')} Inspect</button>
-            <div class="story-transport-center">
-              <button type="button" id="story-previous" aria-label="Previous beat">${icon('skip-back')}</button>
-              <button type="button" id="story-play"><span data-pause>${icon('pause')}</span><span data-play>${icon('play')}</span></button>
-              <button type="button" id="story-next" aria-label="Next beat">${icon('skip-forward')}</button>
+          <section class="story-stage" aria-label="${options.diagramLabel}"></section>
+          <section class="story-controls" aria-label="Playback and timeline">
+            <div class="story-status"><span id="story-beat"></span><span id="story-time"></span></div>
+            <div class="story-slider">
+              <div class="story-rail" aria-hidden="true">
+                <div class="story-fill"></div>
+                ${beats.slice(1).map(beat => `<span class="story-tick" style="left: ${beat.startMs / durationMs * 100}%"></span>`).join('')}
+              </div>
+              <input type="range" aria-label="Lesson timeline" min="0" max="${durationMs}" step="1" value="0" />
             </div>
-            <div class="story-transport-end">
-              <select aria-label="Playback speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
-              <button type="button" id="story-replay" aria-label="Replay lesson" title="Replay lesson">${icon('rotate-ccw')}</button>
+            <div class="story-beats" style="grid-template-columns: ${beats.map(beat => `${beat.durationMs}fr`).join(' ')}">
+              ${beats.map(beat => `<button type="button" title="${beat.label} at ${formatTime(beat.startMs)}" aria-label="Jump to ${beat.label}">${beat.label}</button>`).join('')}
             </div>
-          </div>
-        </section>
-      </div>
-      <footer class="story-footer">${options.footer}</footer>
-    </main>`
+            <div class="story-transport" role="group" aria-label="Playback controls">
+              <button type="button" id="story-inspect" aria-pressed="false" title="Pause and identify parts">${icon('search')} Inspect</button>
+              <div class="story-transport-center">
+                <button type="button" id="story-previous" aria-label="Previous beat">${icon('skip-back')}</button>
+                <button type="button" id="story-play"><span data-pause>${icon('pause')}</span><span data-play>${icon('play')}</span></button>
+                <button type="button" id="story-next" aria-label="Next beat">${icon('skip-forward')}</button>
+              </div>
+              <div class="story-transport-end">
+                <select aria-label="Playback speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+                <button type="button" id="story-replay" aria-label="Replay lesson" title="Replay lesson">${icon('rotate-ccw')}</button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <footer class="story-footer">${options.footer}</footer>
+      </div>`
+    : `<main class="story-viewer">
+        <header class="story-header">
+          <a class="story-back" href="./">${icon('arrow-left')} Anatomy</a>
+          <div class="story-heading"><h1>${options.title}</h1><p>${options.subtitle}</p></div>
+          ${options.controls ? `<div class="story-options">${options.controls}</div>` : ''}
+        </header>
+        <div class="story-theater">
+          <section class="story-stage" aria-label="${options.diagramLabel}"></section>
+          <section class="story-controls" aria-label="Playback and timeline">
+            <div class="story-status"><span id="story-beat"></span><span id="story-time"></span></div>
+            <div class="story-slider">
+              <div class="story-rail" aria-hidden="true">
+                <div class="story-fill"></div>
+                ${beats.slice(1).map(beat => `<span class="story-tick" style="left: ${beat.startMs / durationMs * 100}%"></span>`).join('')}
+              </div>
+              <input type="range" aria-label="Lesson timeline" min="0" max="${durationMs}" step="1" value="0" />
+            </div>
+            <div class="story-beats" style="grid-template-columns: ${beats.map(beat => `${beat.durationMs}fr`).join(' ')}">
+              ${beats.map(beat => `<button type="button" title="${beat.label} at ${formatTime(beat.startMs)}" aria-label="Jump to ${beat.label}">${beat.label}</button>`).join('')}
+            </div>
+            <div class="story-transport" role="group" aria-label="Playback controls">
+              <button type="button" id="story-inspect" aria-pressed="false" title="Pause and identify parts">${icon('search')} Inspect</button>
+              <div class="story-transport-center">
+                <button type="button" id="story-previous" aria-label="Previous beat">${icon('skip-back')}</button>
+                <button type="button" id="story-play"><span data-pause>${icon('pause')}</span><span data-play>${icon('play')}</span></button>
+                <button type="button" id="story-next" aria-label="Next beat">${icon('skip-forward')}</button>
+              </div>
+              <div class="story-transport-end">
+                <select aria-label="Playback speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+                <button type="button" id="story-replay" aria-label="Replay lesson" title="Replay lesson">${icon('rotate-ccw')}</button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <footer class="story-footer">${options.footer}</footer>
+      </main>`
 
   const find = <T extends Element = HTMLElement>(selector: string) => app.querySelector<T>(selector)!
   const stage = find('.story-stage')
@@ -97,7 +146,7 @@ export function mountLesson(options: {
         <h2 tabindex="-1"></h2><p></p><code hidden></code>
       </div>
     </div>`)
-  createIcons({ icons: { ArrowLeft, Pause, Play, RotateCcw, Search, SkipBack, SkipForward, X }, attrs: { 'aria-hidden': 'true', 'stroke-width': 1.65 } })
+  createIcons({ root: app, icons: { ArrowLeft, Pause, Play, RotateCcw, Search, SkipBack, SkipForward, X }, attrs: { 'aria-hidden': 'true', 'stroke-width': 1.65 } })
   const parts = [...art.querySelectorAll<SVGGraphicsElement>('[data-lesson-part]')]
   const slider = find<HTMLInputElement>('.story-slider input')
   const fill = find('.story-fill')
@@ -121,8 +170,16 @@ export function mountLesson(options: {
   const leaderDot = leader.querySelector('circle')!
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)')
 
+  const controller = new AbortController()
+  const { signal } = controller
+  const initialMs = host?.initialPositionMs ?? 0
   let hasStarted = !document.hidden
-  let playback: PlaybackState = { positionMs: 0, startedAt: hasStarted ? performance.now() : null, inspection: null, rate: 1 }
+  let playback: PlaybackState = {
+    positionMs: initialMs,
+    startedAt: hasStarted && initialMs === 0 ? performance.now() : null,
+    inspection: null,
+    rate: 1,
+  }
   let playing = false
   let hovered: SVGGraphicsElement | null = null
   let focused: SVGGraphicsElement | null = null
@@ -239,6 +296,7 @@ export function mountLesson(options: {
       }
       renderedBeat = index
     }
+    host?.onProgress?.(elapsedMs, index, beats.length)
     if (renderedInspection !== inspecting) {
       stage.classList.toggle('story-identify', inspecting)
       inspect.setAttribute('aria-pressed', String(inspecting))
@@ -345,18 +403,18 @@ export function mountLesson(options: {
     event.preventDefault()
     if (pinned) closeDetails()
     else { act({ type: 'inspect' }); inspect.focus() }
-  })
-  play.addEventListener('click', () => act({ type: playing ? 'pause' : 'play' }))
-  find('#story-replay').addEventListener('click', () => act({ type: 'replay' }))
-  previous.addEventListener('click', () => seekBeat(renderedBeat - 1))
-  next.addEventListener('click', () => seekBeat(renderedBeat + 1))
-  for (const [index, jump] of jumps.entries()) jump.addEventListener('click', () => seekBeat(index))
+  }, { signal })
+  play.addEventListener('click', () => act({ type: playing ? 'pause' : 'play' }), { signal })
+  find('#story-replay').addEventListener('click', () => act({ type: 'replay' }), { signal })
+  previous.addEventListener('click', () => seekBeat(renderedBeat - 1), { signal })
+  next.addEventListener('click', () => seekBeat(renderedBeat + 1), { signal })
+  for (const [index, jump] of jumps.entries()) jump.addEventListener('click', () => seekBeat(index), { signal })
   speed.addEventListener('change', () => {
     const rate = Number(speed.value)
     if (rate !== .5 && rate !== 1 && rate !== 2) throw new Error(`Unknown playback speed: ${rate}`)
     act({ type: 'rate', rate })
-  })
-  slider.addEventListener('input', () => act({ type: 'seek', positionMs: slider.valueAsNumber }))
+  }, { signal })
+  slider.addEventListener('input', () => act({ type: 'seek', positionMs: slider.valueAsNumber }), { signal })
   slider.addEventListener('keydown', event => {
     const second = 1000 * normalPlaybackPace
     const delta = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? -second
@@ -364,21 +422,21 @@ export function mountLesson(options: {
     if (!delta) return
     event.preventDefault()
     act({ type: 'seek', positionMs: slider.valueAsNumber + delta })
-  })
+  }, { signal })
   slider.addEventListener('pointerdown', event => {
     if (!event.isPrimary || event.button !== 0) return
     drag = { pointerId: event.pointerId, resume: playing }
     act({ type: 'pause' })
-  })
+  }, { signal })
   window.addEventListener('pointerup', event => {
     if (!drag || drag.pointerId !== event.pointerId) return
     const resume = drag.resume && !playback.inspection && playback.positionMs < durationMs
     drag = null
     if (resume) act({ type: 'play' })
-  })
+  }, { signal })
   window.addEventListener('pointercancel', event => {
     if (drag?.pointerId === event.pointerId) drag = null
-  })
+  }, { signal })
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       drag = null
@@ -387,14 +445,31 @@ export function mountLesson(options: {
       hasStarted = true
       act({ type: 'play' })
     }
-  })
-  reduceMotion.addEventListener('change', () => refresh())
+  }, { signal })
+  reduceMotion.addEventListener('change', () => refresh(), { signal })
+  let destroyed = false
   const layout = () => {
+    if (destroyed) return
     scene.resize?.()
     refresh()
     placeCallout()
   }
-  new ResizeObserver(layout).observe(stage)
+  const observer = new ResizeObserver(layout)
+  observer.observe(stage)
   void document.fonts.ready.then(layout)
   layout()
+
+  return {
+    pause() {
+      if (!destroyed && playing) act({ type: 'pause' })
+    },
+    destroy() {
+      if (destroyed) return
+      destroyed = true
+      cancelAnimationFrame(animationFrame)
+      observer.disconnect()
+      controller.abort()
+      app.innerHTML = ''
+    },
+  }
 }

@@ -1,5 +1,4 @@
-import { mountLesson } from '../timed-lesson/player'
-import type { LessonScene } from '../timed-lesson/player'
+import type { LessonOptions, LessonScene } from '../timed-lesson/player'
 import { frameAt, timeline } from './story'
 import type { SshPart } from './story'
 import './player.css'
@@ -161,11 +160,11 @@ function createSshScene(stage: HTMLElement): LessonScene {
   }
 }
 
-mountLesson({
+export const lesson: LessonOptions = {
   title: 'SSH & tmux',
   subtitle: 'What survives a disconnect?',
   diagramLabel: 'Interactive SSH and tmux diagram',
   timeline,
-  footer: '<p>ASC Week 1 / compressed timing</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux">Try it in Quest 2</a>',
+  footer: '<p>ASC Week 1 / compressed timing</p><a href="https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux" target="_blank" rel="noopener noreferrer">Try it in Quest 2</a>',
   createScene: createSshScene,
-})
+}
