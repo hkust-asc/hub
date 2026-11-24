@@ -6,8 +6,6 @@ import './app.css'
 import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
-  categories,
-  entries,
   entriesForCategory,
   fallbackBackTarget,
   getCategory,
@@ -46,7 +44,7 @@ function element<ElementType extends HTMLElement = HTMLElement>(identifier: stri
 
 let state: AppState = { ...initialState }
 let currentRoute: ParsedRoute = parseRoute(location.hash)
-let atlasMode: 'domains' | 'all' = currentRoute.view === 'atlas' ? currentRoute.mode : 'domains'
+let atlasMode: 'all' | 'domains' = currentRoute.view === 'atlas' ? currentRoute.mode : 'all'
 let atlasQuery = ''
 let atlasKind: 'all' | 'scene' | 'subject' | 'scenario' = 'all'
 let trail: TrailItem[] = []
@@ -66,6 +64,10 @@ let lastResumable: { entryId: string; route: string; title: string; glyph: strin
 
 function refreshIcons(): void {
   createIcons({ icons: iconSet, attrs: { 'stroke-width': 1.65, 'aria-hidden': 'true' } })
+  document.querySelectorAll('svg.lucide rect[rx], svg.lucide rect[ry]').forEach(rect => {
+    rect.removeAttribute('rx')
+    rect.removeAttribute('ry')
+  })
 }
 
 function progressForEntry(entryId: string): string | undefined {
@@ -78,7 +80,7 @@ function progressForEntry(entryId: string): string | undefined {
 }
 
 function canonicalHash(): string {
-  if (currentRoute.view === 'atlas') return atlasMode === 'all' ? '#atlas/all' : '#atlas'
+  if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
   if (currentRoute.view === 'lesson') return `#lesson/${currentRoute.lesson}`
   if (state.mode === 'scenario') return `#scenario/${state.scenario}`
@@ -277,6 +279,9 @@ function renderThinkBackAndRelated(): void {
 }
 
 function renderAtlasSection(): void {
+  const showKindPills = atlasMode === 'all' || atlasQuery.trim().length > 0 || atlasKind !== 'all'
+  const kindGroup = document.querySelector<HTMLElement>('.kind-pills')
+  if (kindGroup) kindGroup.hidden = !showKindPills
   for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-atlas-mode]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.atlasMode === atlasMode))
   }
@@ -398,23 +403,18 @@ function render(): void {
 
   let title = 'Concept & scenario atlas'
   let breadcrumb = 'Atlas'
-  let sceneRef = `ATLAS / 0${categories.length} DOMAINS`
+  let sceneRef = ''
 
   if (currentRoute.view === 'atlas') {
-    const liveTotal = entries.filter(entry => entry.kind !== 'planned').length
-    const plannedTotal = entries.length - liveTotal
-    title = atlasMode === 'all' ? 'All concepts & scenarios' : 'Concept & scenario atlas'
-    breadcrumb = atlasMode === 'all' ? 'Atlas · All Entries' : 'Atlas'
-    sceneRef = `${liveTotal} LIVE · ${plannedTotal} PLANNED`
+    title = atlasMode === 'domains' ? 'Explore by domain' : 'Concept & scenario atlas'
+    breadcrumb = atlasMode === 'domains' ? 'Domains' : 'All Entries'
     renderAtlasSection()
     triggerModestSettle(atlasView, `atlas:${atlasMode}`)
   } else if (currentRoute.view === 'hub') {
     const cat = getCategory(currentRoute.category)
     const items = entriesForCategory(cat.id)
-    const liveCount = items.filter(item => item.kind !== 'planned').length
     title = cat.name
-    breadcrumb = `Domain ${cat.index}`
-    sceneRef = `DOMAIN ${cat.index} / ${liveCount} LIVE`
+    breadcrumb = cat.shortName
     const hubKey = `${cat.id}:${items.map(item => `${item.id}:${progressForEntry(item.id) ?? ''}`).join('|')}`
     if (renderedHubKey !== hubKey) {
       renderedHubKey = hubKey
@@ -425,8 +425,7 @@ function render(): void {
     const entry = getEntry(currentRoute.lesson)!
     const cat = getCategory(entry.category)
     title = entry.title
-    breadcrumb = `${cat.shortName} · Scenario`
-    sceneRef = entry.evidenceLabel.toUpperCase()
+    breadcrumb = cat.shortName
     triggerModestSettle(lessonView, `lesson:${currentRoute.lesson}`)
   } else {
     const node = state.scene === 'a30'
@@ -447,14 +446,15 @@ function render(): void {
       : owningDomain
         ? getCategory(owningDomain).shortName
         : node ? 'Compute architecture' : 'System'
-    sceneRef = node ? 'SCENE 01 / A30' : 'SCENE 00 / HPC4'
     renderWorkbench()
     triggerModestSettle(workbench, `workbench:${state.scene}:${state.mode}`)
   }
 
   element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
   element('breadcrumb-section').textContent = breadcrumb
-  element('scene-reference').textContent = sceneRef
+  const refEl = element('scene-reference')
+  refEl.hidden = !sceneRef
+  refEl.textContent = sceneRef
   document.title = `HPC4 Anatomy / ${title}`
 
   const activeDirectNav = currentRoute.view === 'atlas'
@@ -485,51 +485,22 @@ const previewCard = element('entry-preview')
 let previewAnchor: HTMLElement | null = null
 
 function buildEntryPreviewHtml(entry: EntryDef): string {
-  const kindNames = { scene: '⬡ Scene', subject: '◈ Concept', scenario: '▶ Scenario', planned: '◌ Planned' }
+  const kindNames = { scene: 'Scene', subject: 'Concept', scenario: 'Scenario', planned: 'Planned' }
   const saved = progressForEntry(entry.id)
-  const pips = entry.segments
-    ? `<span class="preview-pips" aria-hidden="true">${Array.from({ length: Math.min(entry.segments, 10) }, () => '<i></i>').join('')}</span>`
-    : ''
-  const actionCue = entry.kind === 'planned'
-    ? 'Planned on curriculum roadmap'
-    : entry.kind === 'scenario'
-      ? `${saved ? `Saved at ${saved} · ` : ''}Click to launch scenario →`
-      : entry.kind === 'scene'
-        ? 'Click to open interactive scene →'
-        : 'Click to inspect in context →'
   return `
     <div class="preview-top">
-      <span class="preview-kind">${kindNames[entry.kind]}</span>
+      <span class="preview-kicker">${kindNames[entry.kind]}</span>
       ${saved ? `<span class="preview-saved">${saved}</span>` : ''}
     </div>
     <h3>${entry.title}</h3>
-    <p class="preview-question">${entry.question}</p>
-    <div class="preview-specs">
-      <div class="preview-spec-row"><span>${entry.formatLabel}</span>${pips}</div>
-      <div class="preview-evidence" data-basis="${entry.evidenceBasis}">
-        <span class="preview-basis-dot" aria-hidden="true"></span>
-        <span>${entry.evidenceLabel}</span>
-      </div>
-      <div class="preview-action">${actionCue}</div>
-    </div>`
+    <p class="preview-question">${entry.question}</p>`
 }
 
 function buildCategoryPreviewHtml(categoryId: CategoryId): string {
   const cat = getCategory(categoryId)
-  const items = entriesForCategory(categoryId)
-  const live = items.filter(item => item.kind !== 'planned')
-  const planned = items.length - live.length
   return `
-    <div class="preview-top">
-      <span class="preview-kind">Domain ${cat.index}</span>
-      <span class="preview-saved">${live.length} live${planned ? ` · ${planned} planned` : ''}</span>
-    </div>
     <h3>${cat.name}</h3>
-    <p class="preview-question">${cat.thesis}</p>
-    <div class="preview-specs">
-      <div class="preview-chip-list">${live.map(item => `<span>${item.shortTitle}</span>`).join('')}</div>
-      <div class="preview-action">Click to view associated entries →</div>
-    </div>`
+    <p class="preview-question">${cat.subtitle}</p>`
 }
 
 function positionPreview(anchor: HTMLElement): void {
@@ -627,7 +598,7 @@ app.addEventListener('click', event => {
 
   const atlasModeBtn = target.closest<HTMLButtonElement>('[data-atlas-mode]')
   if (atlasModeBtn) {
-    const mode = atlasModeBtn.dataset.atlasMode === 'all' ? 'all' : 'domains'
+    const mode = atlasModeBtn.dataset.atlasMode === 'domains' ? 'domains' : 'all'
     atlasMode = mode
     currentRoute = { view: 'atlas', mode }
     hidePreview()

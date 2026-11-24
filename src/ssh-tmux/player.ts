@@ -32,22 +32,22 @@ function createSshScene(stage: HTMLElement): LessonScene {
       <path class="ssh-attach" d="M 182 93 H 209" pathLength="1" hidden/>
       <path class="ssh-shell-tether" d="M 102 131 V 151" hidden/>
       ${part('shell', `
-        <rect class="ssh-tile" x="22" y="55" width="158" height="77" rx="8"/>
+        <rect class="ssh-tile" x="22" y="55" width="158" height="77"/>
         <text class="ssh-label" x="36" y="84">SSH shell</text>
         <text class="ssh-secondary" data-ssh-text="shell" x="36" y="111"></text>`)}
       ${part('tmux', `
-        <rect class="ssh-session" x="210" y="55" width="243" height="148" rx="9"/>
+        <rect class="ssh-session" x="210" y="55" width="243" height="148"/>
         <text class="ssh-label" x="225" y="84">tmux: sim</text>
         <text class="ssh-secondary" data-ssh-text="tmux" x="225" y="108"></text>`, 'hidden')}
       <path class="ssh-file-line" d="M 320 189 V 213" hidden/>
       ${part('process', `
-        <rect class="ssh-tile ssh-process-tile" width="207" height="69" rx="7"/>
+        <rect class="ssh-tile ssh-process-tile" width="207" height="69"/>
         <text class="ssh-code" x="12" y="23">long_sim.sh</text>
-        <rect class="ssh-meter-track" x="12" y="33" width="183" height="6" rx="3"/>
-        <rect class="ssh-meter-fill" x="12" y="33" width="0" height="6" rx="3"/>
+        <rect class="ssh-meter-track" x="12" y="33" width="183" height="6"/>
+        <rect class="ssh-meter-fill" x="12" y="33" width="0" height="6"/>
         <text class="ssh-secondary" data-ssh-text="process" x="12" y="58"></text>`, 'hidden')}
       ${part('file', `
-        <rect class="ssh-file" x="232" y="214" width="207" height="34" rx="6"/>
+        <rect class="ssh-file" x="232" y="214" width="207" height="34"/>
         <path class="ssh-file-icon" d="M 247 220 h 9 l 4 4 v 17 h -13 z M 250 229 h 7 m -7 5 h 7"/>
         <text class="ssh-code" x="268" y="237">~/sim_result.txt</text>`, 'hidden')}
     </g>

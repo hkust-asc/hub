@@ -324,9 +324,11 @@ test('legacy lesson query URLs normalize into unified hash routes', () => {
   assert.equal(normalizeLessonUrl('https://example.org/#a30/numa'), null)
 })
 
-test('catalog routes preserve direct scene, domain hub, and lesson links', () => {
-  assert.deepEqual(parseRoute(''), { view: 'atlas', mode: 'domains' })
+test('catalog routes default to all entries and preserve domain, scene, and lesson links', () => {
+  assert.deepEqual(parseRoute(''), { view: 'atlas', mode: 'all' })
+  assert.deepEqual(parseRoute('#atlas'), { view: 'atlas', mode: 'all' })
   assert.deepEqual(parseRoute('#atlas/all'), { view: 'atlas', mode: 'all' })
+  assert.deepEqual(parseRoute('#atlas/domains'), { view: 'atlas', mode: 'domains' })
   assert.deepEqual(parseRoute('#atlas/linux'), { view: 'hub', category: 'linux' })
   assert.deepEqual(parseRoute('#a30/numa'), { view: 'workbench', scene: 'a30', nodeTopic: 'numa' })
   assert.deepEqual(parseRoute('#cluster/lmod'), { view: 'workbench', scene: 'cluster', clusterTopic: 'lmod' })

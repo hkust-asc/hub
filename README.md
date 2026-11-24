@@ -22,8 +22,8 @@ The model tests require Node.js 22.18 or newer for native TypeScript execution.
 
 ## Explore
 
-- Start at the **Concept Atlas** (`#atlas`) or use the persistent left navigation grouped by domain (**Cluster & Nodes**, **Memory, Bus & Storage**, **Software & Slurm**, **Linux & Remote**, **GPU & Scaling**) plus direct scene shortcuts. On phones it becomes a keyboard-accessible drawer.
-- Open any **Domain Hub** (`#atlas/nodes`, `#atlas/linux`, etc.) to browse associated scenes, concepts, and guided scenarios together, hover tiles to preview questions and evidence basis, or switch to **All Entries** (`#atlas/all`) to filter across current and planned items.
+- Start at the **Concept Atlas** (`#atlas`, showing **All Entries** by default, or `#atlas/domains` for domain shelves) or use the persistent left navigation grouped by domain (**Cluster & Nodes**, **Memory, Bus & Storage**, **Software & Slurm**, **Linux & Remote**, **GPU & Scaling**) plus direct scene shortcuts. On phones it becomes a keyboard-accessible drawer.
+- Open any **Domain Hub** (`#atlas/nodes`, `#atlas/linux`, etc.) to browse associated scenes, concepts, and guided scenarios together, or filter across current and planned items directly in **All Entries**.
 - Select hardware in a diagram or use the shared Inspect subject menu. Secondary explanations and related ideas are under Why it matters.
 - Open the A30 cutaway (`#a30`) from the Atlas, navigation, or subject notes. Software subjects remain distinct from physical components.
 - **A job through HPC4** (`#scenario/first-job`) follows a batch job from login to compute and storage.

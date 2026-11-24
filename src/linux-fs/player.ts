@@ -57,22 +57,22 @@ function createScene(stage: HTMLElement): LessonScene {
     </g>
     <g class="fs-compare" aria-hidden="true">
       <text class="fs-small" y="21">Windows</text>
-      <rect x="76" y="2" width="57" height="27" rx="5"/><text class="fs-letter" x="104.5" y="21">C:\\</text>
-      <rect x="141" y="2" width="57" height="27" rx="5"/><text class="fs-letter" x="169.5" y="21">D:\\</text>
+      <rect x="76" y="2" width="57" height="27"/><text class="fs-letter" x="104.5" y="21">C:\\</text>
+      <rect x="141" y="2" width="57" height="27"/><text class="fs-letter" x="169.5" y="21">D:\\</text>
     </g>
     ${tree.map(id => part(id, `
-      <rect class="fs-node" height="40" rx="7"/>
+      <rect class="fs-node" height="40"/>
       <text class="fs-name" y="25">${parts[id].label}</text>
       <text class="fs-backed-by" y="32" hidden></text>
     `)).join('')}
     <g class="fs-pwd" aria-hidden="true" hidden>
-      <rect width="47" height="19" rx="8"/>
+      <rect width="47" height="19"/>
       <circle cx="9" cy="9.5" r="2.5"/><text x="16" y="13">pwd</text>
     </g>
     <g class="fs-tray" hidden>
       <path class="fs-tray-rule" aria-hidden="true"/><text class="fs-small">Example backing storage</text>
       ${storage.map(id => part(id, `
-        <rect class="fs-storage" height="50" rx="8"/>
+        <rect class="fs-storage" height="50"/>
         <text class="fs-storage-name" x="12" y="22">${parts[id].label}</text>
         <text class="fs-small" x="12" y="39">${id === 'local-disk' ? 'Root filesystem' : '/home and /scratch'}</text>
       `)).join('')}

@@ -80,7 +80,7 @@ function gpu(horizontal: number, depth: number, index: number): string {
     contents += line([[horizontal + 13 + fin * 12, depth + 14, 35], [horizontal + 13 + fin * 12, depth + 55, 35]], 'gpu-fin')
   }
   const [textHorizontal, textDepth] = project([horizontal + 40, depth + 37, 36])
-  contents += `<rect x="${textHorizontal - 19}" y="${textDepth - 10}" width="38" height="20" rx="3" class="gpu-label-bg" />
+  contents += `<rect x="${textHorizontal - 19}" y="${textDepth - 10}" width="38" height="20" class="gpu-label-bg" />
     <text x="${textHorizontal}" y="${textDepth + 4}" class="gpu-word" text-anchor="middle">A30</text>
     <circle cx="${project([horizontal + 70, depth + 58, 35])[0]}" cy="${project([horizontal + 70, depth + 58, 35])[1]}" r="2.7" class="device-led" />`
   return part('gpu', `GPU ${index}, NVIDIA A30, 24 GB device memory`, contents, -48, `gpu-unit gpu-${index}`)
@@ -166,7 +166,7 @@ export function createScene(): string {
       <g class="device-marker"><path d="M 484 463 L 461 433" /><circle cx="484" cy="477" r="19" /><text x="484" y="485" text-anchor="middle">D</text></g>
     </g>
     <g class="diagram-scale" aria-hidden="true"><path d="M 84 484 H 153 M 84 480 V 488 M 153 480 V 488" /><text x="84" y="508">SCHEMATIC / NOT TO SCALE</text></g>
-    <g class="allocation-label" aria-hidden="true"><rect x="602" y="466" width="138" height="28" rx="4" /><text x="671" y="484" text-anchor="middle">GPU 0 / ALLOCATED</text></g>
+    <g class="allocation-label" aria-hidden="true"><rect x="602" y="466" width="138" height="28" /><text x="671" y="484" text-anchor="middle">GPU 0 / ALLOCATED</text></g>
   </svg>`
   return diagram
 }
@@ -196,7 +196,7 @@ export function createClusterScene(): string {
     <path d="M 120 294 V 326 H 870 V 294" class="cluster-fabric-line" />
     ${families.map(family => `<path d="M ${family.horizontal + 15} 259 V 326" class="cluster-family-link" data-family-link="${family.id}" />`).join('')}
     ${families.map(family => `<g class="cluster-part" data-cluster-topic="${family.id}" role="button" tabindex="0" aria-label="${family.name === 'LOGIN' ? 'Login nodes' : family.id === 'a30' ? 'A30 compute nodes' : family.id === 'rtx4090d' ? 'RTX 4090D compute nodes' : family.id === 'cpu-nodes' ? 'CPU compute nodes' : 'Other GPU compute nodes'}" aria-pressed="false"><title>${family.name}</title>${rackGlyph(family.horizontal, 196, family.palette)}<text x="${family.horizontal + 15}" y="268" text-anchor="middle" class="cluster-part-name">${family.name}</text><text x="${family.horizontal + 15}" y="285" text-anchor="middle" class="cluster-part-detail">${family.subtitle}</text>${family.id === 'a30' ? '<text x="510" y="111" text-anchor="middle" class="cluster-detail-marker">DETAIL SCENE</text>' : ''}</g>`).join('')}
-    <g class="cluster-part fabric-subject" data-cluster-topic="fabric" role="button" tabindex="0" aria-label="Internode fabric, 200 Gbps RoCE" aria-pressed="false"><rect x="354" y="309" width="291" height="34" rx="4" /><text x="500" y="330" text-anchor="middle" class="cluster-fabric-text">200 Gbps RoCE / internode fabric</text></g>
+    <g class="cluster-part fabric-subject" data-cluster-topic="fabric" role="button" tabindex="0" aria-label="Internode fabric, 200 Gbps RoCE" aria-pressed="false"><rect x="354" y="309" width="291" height="34" /><text x="500" y="330" text-anchor="middle" class="cluster-fabric-text">200 Gbps RoCE / internode fabric</text></g>
     <path d="M 510 355 V 387" class="storage-access-link" /><text x="527" y="377" class="cluster-access-label">SHARED FILE-SYSTEM ACCESS</text>
     <g class="cluster-part storage-subject" data-cluster-topic="storage" role="button" tabindex="0" aria-label="Shared storage, home project and scratch" aria-pressed="false">${rackGlyph(495, 453, 'memory')}<text x="590" y="420" class="cluster-part-name">SHARED STORAGE</text><text x="590" y="441" class="cluster-part-detail">/home /project /scratch</text><text x="590" y="461" class="cluster-access-label">Storage-network route not modeled</text></g>
     <text x="62" y="491" class="cluster-access-label">FAMILY GLYPHS / NOT AN INVENTORY OR SWITCH MAP</text>

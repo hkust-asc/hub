@@ -1,24 +1,10 @@
 import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForTarget } from './catalog'
-import type { CategoryDef, CategoryId, EntryDef, EntryKind } from './catalog'
+import type { CategoryDef, CategoryId, EntryDef } from './catalog'
 import { renderGlyph } from './glyphs'
 import { evidence } from './model'
 import { createClusterScene, createScene } from './scene'
 
 export const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`
-
-const kindBadgeSymbol: Record<EntryKind, string> = {
-  scene: '⬡',
-  subject: '◈',
-  scenario: '▶',
-  planned: '◌',
-}
-
-const kindBadgeLabel: Record<EntryKind, string> = {
-  scene: 'Scene',
-  subject: 'Concept',
-  scenario: 'Scenario',
-  planned: 'Planned',
-}
 
 export function renderEntryTile(
   entry: EntryDef,
@@ -34,7 +20,7 @@ export function renderEntryTile(
   return `<${tag} class="entry-tile${options.compact ? ' is-compact' : ''}" ${attrs} data-preview-entry="${entry.id}" data-kind="${entry.kind}" data-tone="${entry.tone}"${style}>
     <span class="entry-tile-frame">
       ${renderGlyph(entry.glyph)}
-      <span class="entry-kind-badge" title="${kindBadgeLabel[entry.kind]}" aria-hidden="true">${kindBadgeSymbol[entry.kind]}</span>
+      ${entry.kind === 'scenario' ? `<span class="entry-play-mark" aria-hidden="true">▶</span>` : ''}
       ${options.progress ? `<span class="entry-progress-dot" title="Saved: ${options.progress}" aria-hidden="true"></span>` : ''}
     </span>
     <span class="entry-tile-caption">${entry.shortTitle}</span>
@@ -42,21 +28,16 @@ export function renderEntryTile(
 }
 
 export function renderDomainTile(category: CategoryDef, index: number): string {
-  const catEntries = entriesForCategory(category.id)
-  const liveCount = catEntries.filter(entry => entry.kind !== 'planned').length
-  const plannedCount = catEntries.length - liveCount
   return `<a class="domain-tile" href="#atlas/${category.id}" data-route="#atlas/${category.id}" data-preview-category="${category.id}" data-tone="${category.tone}" style="--tile-index: ${index}">
     <span class="domain-tile-frame">
       ${renderGlyph(category.glyph)}
-      <span class="domain-count-pill" aria-hidden="true">${liveCount}${plannedCount ? `<em>+${plannedCount}</em>` : ''}</span>
     </span>
     <span class="domain-tile-title">${category.shortName}</span>
-    <span class="domain-tile-meta" aria-hidden="true">${category.index} · ${liveCount} live</span>
   </a>`
 }
 
 export function renderAtlasBody(options: {
-  mode: 'domains' | 'all'
+  mode: 'all' | 'domains'
   query: string
   kind: 'all' | 'scene' | 'subject' | 'scenario'
   progressForEntry: (entryId: string) => string | undefined
@@ -67,16 +48,7 @@ export function renderAtlasBody(options: {
     const workflowCats = categories.filter(cat => cat.track === 'workflow')
     const featuredScenarios = entries.filter(entry => entry.kind === 'scenario')
     return `
-      <div class="atlas-intro">
-        <div class="atlas-welcome">
-          <span class="atlas-welcome-glyph" data-tone="blue">${renderGlyph('cluster')}</span>
-          <div>
-            <span class="atlas-eyebrow">HPC4 &amp; ASC ANATOMY</span>
-            <h2>Select a domain to explore</h2>
-          </div>
-        </div>
-        <p class="atlas-prompt">Hover any tile to preview its mechanism and evidence basis, or open a domain hub to see scenes and guided scenarios side by side.</p>
-      </div>
+      <p class="atlas-prompt">Pick a domain to explore its concepts and scenarios, or start directly from a guided walkthrough below.</p>
       <div class="atlas-shelves">
         <section class="atlas-shelf" aria-label="HPC4 System Architecture">
           <h3 class="shelf-pill"><span>HPC4 System Architecture</span></h3>
@@ -91,7 +63,7 @@ export function renderAtlasBody(options: {
           </div>
         </section>
         <section class="atlas-shelf atlas-featured-shelf" aria-label="Guided Scenarios">
-          <h3 class="shelf-pill"><span>Guided Scenarios · Ready to Play</span></h3>
+          <h3 class="shelf-pill"><span>Guided Scenarios</span></h3>
           <div class="entry-row">
             ${featuredScenarios.map((entry, idx) => renderEntryTile(entry, { index: idx, progress: options.progressForEntry(entry.id) })).join('')}
           </div>
@@ -115,11 +87,9 @@ export function renderAtlasBody(options: {
         <div class="catalog-group-header">
           <a class="catalog-group-link" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}">
             <span class="catalog-group-dot"></span>
-            <span class="catalog-group-index">${cat.index}</span>
             <h3>${cat.name}</h3>
             ${icon('chevron-right')}
           </a>
-          <span class="catalog-group-count">${groupEntries.filter(e => e.kind !== 'planned').length} live${groupEntries.some(e => e.kind === 'planned') ? ` · ${groupEntries.filter(e => e.kind === 'planned').length} planned` : ''}</span>
         </div>
         <div class="entry-row is-left">
           ${groupEntries.map((entry, idx) => renderEntryTile(entry, { index: idx, progress: options.progressForEntry(entry.id) })).join('')}
@@ -143,44 +113,39 @@ export function renderHubView(
       <header class="hub-header">
         <span class="hub-category-glyph" data-tone="${cat.tone}">${renderGlyph(cat.glyph)}</span>
         <div class="hub-title-block">
-          <span class="hub-eyebrow">EXPLORING DOMAIN ${cat.index}</span>
+          <span class="hub-eyebrow">Exploring</span>
           <h2 id="hub-title" tabindex="-1">${cat.name}</h2>
           <p>${cat.subtitle}</p>
         </div>
       </header>
       <div class="hub-shelves">
         ${exploreItems.length > 0 ? `<section class="hub-shelf" aria-label="Scenes and subjects">
-          <h3 class="shelf-pill"><span>Associated Scenes &amp; Concepts</span></h3>
+          <h3 class="shelf-pill"><span>Scenes &amp; Concepts</span></h3>
           <div class="entry-row">
             ${exploreItems.map(entry => renderEntryTile(entry, { index: runningIndex++, progress: progressForEntry(entry.id) })).join('')}
           </div>
         </section>` : ''}
         ${scenarioItems.length > 0 ? `<section class="hub-shelf" aria-label="Guided scenarios and roadmap">
-          <h3 class="shelf-pill"><span>${exploreItems.length > 0 ? 'Guided Scenarios &amp; Upcoming' : 'Associated Scenarios &amp; Roadmap'}</span></h3>
+          <h3 class="shelf-pill"><span>${exploreItems.length > 0 ? 'Guided Scenarios &amp; Upcoming' : 'Scenarios &amp; Upcoming'}</span></h3>
           <div class="entry-row">
             ${scenarioItems.map(entry => renderEntryTile(entry, { index: runningIndex++, progress: progressForEntry(entry.id) })).join('')}
           </div>
         </section>` : ''}
       </div>
       <aside class="hub-thesis" aria-label="Domain core concept">
-        <span class="hub-thesis-kicker">Core mental model</span>
         <p>${cat.thesis}</p>
       </aside>
     </div>`
 }
 
 export function createLayout(): string {
-  const liveTotal = entries.filter(entry => entry.kind !== 'planned').length
   const systemCats = categories.filter(cat => cat.track === 'system')
   const workflowCats = categories.filter(cat => cat.track === 'workflow')
-  const renderSidebarCat = (cat: CategoryDef) => {
-    const liveCount = entriesForCategory(cat.id).filter(entry => entry.kind !== 'planned').length
-    return `<a class="nav-item domain-nav-item" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}" data-domain-nav="${cat.id}" data-tone="${cat.tone}">
+  const renderSidebarCat = (cat: CategoryDef) =>
+    `<a class="nav-item domain-nav-item" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}" data-domain-nav="${cat.id}" data-tone="${cat.tone}">
       <span class="domain-dot" aria-hidden="true"></span>
       <span>${cat.shortName}</span>
-      <span class="nav-count">${liveCount}</span>
     </a>`
-  }
 
   return `
     <a class="skip-link" href="#workspace">Skip to workspace</a>
@@ -195,7 +160,7 @@ export function createLayout(): string {
         <nav class="primary-nav" aria-label="Primary navigation">
           <div class="nav-group">
             <h2>Explore</h2>
-            <a class="nav-item" href="#atlas" data-route="#atlas" data-nav-id="atlas">${icon('layout-grid')}<span>Concept Atlas</span><span class="nav-count">${liveTotal}</span></a>
+            <a class="nav-item" href="#atlas" data-route="#atlas" data-nav-id="atlas">${icon('layout-grid')}<span>Concept Atlas</span></a>
           </div>
           <div class="nav-group">
             <h2>HPC4 System</h2>
@@ -229,22 +194,22 @@ export function createLayout(): string {
           </div>
           <div class="heading-aside">
             <div class="related-strip" id="related-strip" aria-label="Related entries" hidden></div>
-            <span class="scene-reference" id="scene-reference">ATLAS / 05 DOMAINS</span>
+            <span class="scene-reference" id="scene-reference" hidden></span>
           </div>
         </header>
 
         <section class="atlas-surface" id="atlas-view" aria-label="Concept and scenario atlas">
           <div class="atlas-toolbar">
             <div class="segmented-pills" role="group" aria-label="Atlas view mode">
-              <button type="button" data-atlas-mode="domains" aria-pressed="true">Domains</button>
-              <button type="button" data-atlas-mode="all" aria-pressed="false">All Entries</button>
+              <button type="button" data-atlas-mode="all" aria-pressed="true">All Entries</button>
+              <button type="button" data-atlas-mode="domains" aria-pressed="false">Domains</button>
             </div>
             <div class="atlas-filters">
               <div class="kind-pills" role="group" aria-label="Filter by entry kind">
                 <button type="button" data-atlas-kind="all" aria-pressed="true">All</button>
-                <button type="button" data-atlas-kind="scene" aria-pressed="false">⬡ Scenes</button>
-                <button type="button" data-atlas-kind="subject" aria-pressed="false">◈ Concepts</button>
-                <button type="button" data-atlas-kind="scenario" aria-pressed="false">▶ Scenarios</button>
+                <button type="button" data-atlas-kind="scene" aria-pressed="false">Scenes</button>
+                <button type="button" data-atlas-kind="subject" aria-pressed="false">Concepts</button>
+                <button type="button" data-atlas-kind="scenario" aria-pressed="false">Scenarios</button>
               </div>
               <label class="atlas-search-wrap" aria-label="Filter entries">
                 ${icon('search')}

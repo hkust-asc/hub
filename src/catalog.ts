@@ -51,7 +51,7 @@ export interface TrailItem {
 }
 
 export type ParsedRoute =
-  | { view: 'atlas'; mode: 'domains' | 'all' }
+  | { view: 'atlas'; mode: 'all' | 'domains' }
   | { view: 'hub'; category: CategoryId }
   | { view: 'workbench'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId; scenario?: ScenarioId }
   | { view: 'lesson'; lesson: LessonId }
@@ -715,12 +715,13 @@ export function normalizeLessonUrl(href: string): string | null {
 
 export function parseRoute(hash: string): ParsedRoute {
   const cleaned = hash.replace(/^#/, '').trim()
-  if (!cleaned || cleaned === 'atlas') return { view: 'atlas', mode: 'domains' }
+  if (!cleaned || cleaned === 'atlas') return { view: 'atlas', mode: 'all' }
   const [head, tail] = cleaned.split('/')
   if (head === 'atlas') {
+    if (tail === 'domains') return { view: 'atlas', mode: 'domains' }
     if (tail === 'all') return { view: 'atlas', mode: 'all' }
     if (isCategoryId(tail)) return { view: 'hub', category: tail }
-    return { view: 'atlas', mode: 'domains' }
+    return { view: 'atlas', mode: 'all' }
   }
   if (head === 'lesson' && isLessonId(tail)) return { view: 'lesson', lesson: tail }
   if (head === 'scenario') {
@@ -733,7 +734,7 @@ export function parseRoute(hash: string): ParsedRoute {
   if (head === 'cluster') {
     return { view: 'workbench', scene: 'cluster', clusterTopic: tail as ClusterTopicId | undefined }
   }
-  return { view: 'atlas', mode: 'domains' }
+  return { view: 'atlas', mode: 'all' }
 }
 
 export function activeEntryForState(
@@ -778,7 +779,9 @@ export function trailSnapshotForCurrent(
   sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): TrailItem {
   if (route.view === 'atlas') {
-    return { route: route.mode === 'all' ? '#atlas/all' : '#atlas', label: 'Concept Atlas', glyph: 'cluster', tone: 'slate' }
+    return route.mode === 'domains'
+      ? { route: '#atlas/domains', label: 'Domains', glyph: 'cluster', tone: 'slate' }
+      : { route: '#atlas', label: 'Concept Atlas', glyph: 'cluster', tone: 'slate' }
   }
   if (route.view === 'hub') {
     const cat = getCategory(route.category)

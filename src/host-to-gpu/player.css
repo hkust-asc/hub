@@ -1,5 +1,5 @@
-.gpu-lesson-placement { display: flex; padding: 2px; border: 1px solid var(--story-border); border-radius: 7px; background: var(--story-surface); }
-.gpu-lesson-placement button { min-height: 34px; padding: 4px 9px; border-radius: 4px; background: transparent; color: var(--story-muted); font-size: 12px; }
+.gpu-lesson-placement { display: flex; padding: 2px; border: 1px solid var(--story-border); border-radius: 0; background: var(--story-surface); }
+.gpu-lesson-placement button { min-height: 34px; padding: 4px 9px; border-radius: 0; background: transparent; color: var(--story-muted); font-size: 12px; }
 .gpu-lesson-placement button[aria-pressed='true'] { background: #344852; color: var(--story-text); }
 .gpu-lesson-stage :is(.diagram-connectors, .annotation, .socket-label, .diagram-scale, .buffer-markers, .allocation-label) { display: none; }
 .gpu-lesson-stage .part { transition: opacity .25s ease, filter .2s ease; }
@@ -27,7 +27,7 @@
 .gpu-lesson-token {
   position: absolute;
   transform: translate(-50%, -86%);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 2px 6px;
   background: #ffd091;
   border: 1px solid #956238;

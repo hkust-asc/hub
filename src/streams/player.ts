@@ -31,7 +31,7 @@ function createScene(stage: HTMLElement): LessonScene {
       ${channels.map(channel => `<path class="streams-wire" data-channel="${channel}"/>`).join('')}
     </g>
     ${part('process', `
-      <rect class="streams-box" rx="9"/>
+      <rect class="streams-box"/>
       <text class="streams-kicker">WORKSHOP COMMAND</text>
       <text class="streams-name">noisy_sensor.sh</text>
     `)}
@@ -39,14 +39,14 @@ function createScene(stage: HTMLElement): LessonScene {
       <g class="streams-port" data-channel="${channel}" aria-hidden="true"><circle r="13"/><text y="4">${i + 1}</text></g>
       ${part(channel, `
         <g class="streams-gate" data-channel="${channel}">
-          <rect x="-45" y="-13" width="90" height="26" rx="6"/>
+          <rect x="-45" y="-13" width="90" height="26"/>
           <text class="streams-gate-name" x="-35" y="4">${channel}</text>
           <text class="streams-operator" x="33" y="4" text-anchor="end"></text>
         </g>
       `)}
     `).join('')}
     ${destinations.map(id => part(id, `
-      <rect class="streams-box streams-destination" rx="8"/>
+      <rect class="streams-box streams-destination"/>
       <text class="streams-name" x="13" y="22">${parts[id].name}</text>
       <path class="streams-rule" d="M 12 31 H 138"/>
       ${[0, 1, 2, 3].map(i => `<text class="streams-line" x="13" y="${48 + i * 15}"></text>`).join('')}
@@ -54,7 +54,7 @@ function createScene(stage: HTMLElement): LessonScene {
     <g aria-hidden="true">
       ${['ERROR', 'PASSCODE', 'WARN'].map(badge => {
         const width = badge.length * 7 + 12
-        return `<g class="streams-packet" data-packet="${badge}" data-channel="${badge === 'PASSCODE' ? 'stdout' : 'stderr'}" hidden><rect x="${-width / 2}" y="-10" width="${width}" height="20" rx="5"/><text y="4">${badge}</text></g>`
+        return `<g class="streams-packet" data-packet="${badge}" data-channel="${badge === 'PASSCODE' ? 'stdout' : 'stderr'}" hidden><rect x="${-width / 2}" y="-10" width="${width}" height="20"/><text y="4">${badge}</text></g>`
       }).join('')}
     </g>
   </svg>`

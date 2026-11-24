@@ -147,6 +147,10 @@ export function mountLesson(options: LessonOptions, host?: LessonHost): MountedL
       </div>
     </div>`)
   createIcons({ root: app, icons: { ArrowLeft, Pause, Play, RotateCcw, Search, SkipBack, SkipForward, X }, attrs: { 'aria-hidden': 'true', 'stroke-width': 1.65 } })
+  app.querySelectorAll('svg.lucide rect[rx], svg.lucide rect[ry]').forEach(rect => {
+    rect.removeAttribute('rx')
+    rect.removeAttribute('ry')
+  })
   const parts = [...art.querySelectorAll<SVGGraphicsElement>('[data-lesson-part]')]
   const slider = find<HTMLInputElement>('.story-slider input')
   const fill = find('.story-fill')
