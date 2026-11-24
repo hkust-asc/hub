@@ -22,6 +22,8 @@ export function createLayout(): string {
               ? `<a class="nav-item scenario-nav" href="?lesson=host-to-gpu">${icon('play')}<span>${scenario.name}</span></a>`
               : `<button class="nav-item scenario-nav" type="button" data-scenario="${identifier}" data-nav-id="${identifier}">${icon('play')}<span>${scenario.name}</span><span class="scenario-bookmark" data-bookmark="${identifier}"></span></button>`).join('')}
             <a class="nav-item scenario-nav" href="?lesson=ssh-tmux">${icon('play')}<span>SSH &amp; tmux</span></a>
+            <a class="nav-item scenario-nav" href="?lesson=streams">${icon('play')}<span>Where does the output go?</span></a>
+            <a class="nav-item scenario-nav" href="?lesson=linux-fs">${icon('play')}<span>One Tree, No Drive Letters</span></a>
           </div>
         </nav>
         <div class="sidebar-footer"><a href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">${icon('book-open')}<span>HPC handbook</span>${icon('arrow-up-right')}</a><span class="offline-note"><span></span>Educational model / not live</span></div>

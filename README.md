@@ -1,6 +1,6 @@
 # HPC4 Anatomy: Scene-Based Architecture Explorer
 
-A small Vite / TypeScript explorer for HPC and ASC workshop concepts, with HPC4 as a concrete example. It uses fixed-angle SVG scenes and runs without a 3D engine or a live server connection.
+A small Vite / TypeScript explorer for HPC and ASC workshop concepts, with HPC4 as a concrete example. Its SVG cutaways and schematics run without a 3D engine or a live server connection.
 
 The agreed product direction is recorded in [DIRECTION.md](DIRECTION.md), including the Create Ponder-inspired interaction model, reuse boundaries, evidence policy, and near-term sequence. [CONTEXT.md](CONTEXT.md) defines the shared scene/scenario vocabulary.
 
@@ -28,7 +28,9 @@ The model tests require Node.js 22.18 or newer for native TypeScript execution.
 - **A job through HPC4** follows a batch job from login to compute and storage.
 - **Host to GPU** (`?lesson=host-to-gpu`) shows the input and result copies at each memory location. Compare **Local** and **Cross-socket** to follow different routes.
 - **SSH & tmux** (`?lesson=ssh-tmux`) compares a task run directly over SSH with the same task inside tmux, then reconnects and reads the result. It accompanies [ASC Week 1, Quest 2](https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux).
-- The timed lessons autoplay at 1x: 58 seconds for **SSH & tmux** and 62 seconds for **Host to GPU**. Choose 2x for a quicker replay, seek with the segmented timeline, or pause with **Inspect**.
+- **Where does the output go?** (`?lesson=streams`) follows a demo passcode and diagnostics through `>` and `2>`, then asks learners to predict what appears on screen. It also accompanies Quest 2.
+- **One Tree, No Drive Letters** (`?lesson=linux-fs`) follows `pwd`, `ls -a`, relative and absolute paths, and an example of local and shared mounts. It accompanies [Quest 1](https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore).
+- The timed lessons autoplay at 1x. Choose 2x for a quicker replay, seek with the segmented timeline, or pause with **Inspect**.
 - Compare local and cross-socket CPU/memory placement.
 - Separate the drawing's layers, reset the node view without rewinding the scenario, or export its SVG.
 - Open Illustrative topology for sources and assumptions. Diagram links are not a measured wiring map.
@@ -46,5 +48,5 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 - `src/main.ts`: accessible controls, scenario playback, inspection, SVG export.
 - `src/app.css`: visual styling, responsive layout, reduced-motion behavior.
 - `src/timed-lesson/`: shared clock, transport, callouts, and Identify mode.
-- `src/host-to-gpu/`, `src/ssh-tmux/`: scene-specific storytelling and rendering.
-- `tests/model.test.ts`: locality, transfer direction, cross-scene navigation, playback, and reset tests.
+- `src/host-to-gpu/`, `src/ssh-tmux/`, `src/streams/`, `src/linux-fs/`: scene-specific storytelling and rendering.
+- `tests/model.test.ts`: navigation, playback, and scene-state tests.

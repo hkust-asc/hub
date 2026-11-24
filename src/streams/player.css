@@ -1,0 +1,37 @@
+.streams-stage { height: clamp(442px, calc(100dvh - 242px), 580px); }
+.streams-stage .story-art { top: calc(50% - 50px); height: calc(100% - 120px); }
+.streams-art { --stdout: #6fe3c1; --stderr: #f39889; }
+.streams-art text { pointer-events: none; }
+.streams-art [data-channel='stdout'] { --channel: var(--stdout); }
+.streams-art [data-channel='stderr'] { --channel: var(--stderr); }
+.streams-box { fill: #233740; stroke: #59717d; stroke-width: 1.4; }
+.streams-destination { fill: #17272f; }
+.streams-rule { fill: none; stroke: #45606c; }
+.streams-name { fill: #edf5f7; font: 600 16px 'IBM Plex Sans', sans-serif; }
+.streams-kicker { fill: #a7bbc6; font: 11px var(--mono); letter-spacing: 1px; }
+.streams-line { fill: var(--channel, #adc1ca); font: 13px var(--mono); }
+.streams-wire { fill: none; stroke: var(--channel); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.streams-wire.streams-pending { stroke-dasharray: 4 5; opacity: .7; }
+.streams-arrow { fill: var(--channel); }
+.streams-port circle, .streams-packet rect { fill: var(--channel); stroke: #24353d; stroke-width: 1.4; }
+.streams-port text, .streams-packet text { fill: #15252a; font: 600 12px var(--mono); text-anchor: middle; }
+.streams-packet { pointer-events: none; }
+.streams-gate rect { fill: #1b2b33; stroke: var(--channel); stroke-width: 1.3; }
+.streams-gate text { fill: var(--channel); font: 12px var(--mono); }
+.streams-gate .streams-operator { font-weight: 600; }
+.streams-diverted .streams-gate rect { fill: #355255; }
+.streams-predicting .streams-gate rect { stroke-dasharray: 4 3; }
+.streams-preview .streams-destination { stroke: var(--stderr); stroke-dasharray: 5 4; }
+.streams-review :is(.streams-wire, .streams-gate, .streams-port) { opacity: .48; }
+.streams-review [data-lesson-part='passcode'] .streams-destination { stroke: var(--stdout); }
+.streams-review [data-lesson-part='errors'] .streams-destination { stroke: var(--stderr); }
+.streams-art :is(.story-hovered, [data-lesson-part][aria-pressed='true'], [data-lesson-part]:focus-visible) {
+  filter: drop-shadow(0 1px 3px #a0d4ec92);
+}
+.streams-stage.story-identify .streams-packet { visibility: hidden; }
+
+@media (max-width: 690px) {
+  .streams-stage { height: clamp(472px, 124vw, 560px); }
+  .streams-stage .story-art { top: calc(50% - 68px); height: calc(100% - 156px); }
+  .streams-stage .story-callout[data-kind='note'] { width: min(266px, calc(100% - 20px)); }
+}

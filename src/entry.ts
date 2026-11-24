@@ -8,6 +8,10 @@ if (url.searchParams.get('lesson') === 'host-to-gpu') {
   void import('./host-to-gpu/player')
 } else if (url.searchParams.get('lesson') === 'ssh-tmux') {
   void import('./ssh-tmux/player')
+} else if (url.searchParams.get('lesson') === 'streams') {
+  void import('./streams/player')
+} else if (url.searchParams.get('lesson') === 'linux-fs') {
+  void import('./linux-fs/player')
 } else {
   void import('./main')
 }

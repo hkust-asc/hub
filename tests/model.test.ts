@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { initialState, jobSteps, scenarios, stages, transferPath, updateState } from '../src/model.ts'
 import { frameAt as gpuFrameAt, timeline as gpuTimeline } from '../src/host-to-gpu/story.ts'
+import { frameAt as filesystemFrameAt, timeline as filesystemTimeline } from '../src/linux-fs/story.ts'
 import { frameAt as sshFrameAt, timeline as sshTimeline } from '../src/ssh-tmux/story.ts'
+import { frameAt as streamsFrameAt, timeline as streamsTimeline } from '../src/streams/story.ts'
 import type { PlaybackState } from '../src/timed-lesson/timeline.ts'
 
 test('a local H2D path does not cross the inter-socket link', () => {
@@ -145,9 +147,9 @@ test('resetting the node view does not rewind, pause, or change the active scena
   assert.deepEqual(updateState(running, { type: 'reset-view' }), { ...running, placement: 'local', exploded: false })
 })
 
-test('at normal speed both timed lessons take twice their authored duration', () => {
+test('at normal speed each timed lesson takes twice its authored duration', () => {
   const playing: PlaybackState = { positionMs: 0, startedAt: 0, inspection: null, rate: 1 }
-  for (const timeline of [gpuTimeline, sshTimeline]) {
+  for (const timeline of [gpuTimeline, sshTimeline, streamsTimeline, filesystemTimeline]) {
     const nextBeat = timeline.beats[1]!.startMs * 2
     assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat - 1)).index, 0)
     assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat)).index, 1)
@@ -238,4 +240,70 @@ test('reattaching does not restart the task and seeking before completion hides 
   assert.equal(sshFrameAt(reconnect + 2199).file, false)
   assert.equal(sshFrameAt(0).tmux, 'absent')
   assert.equal(sshFrameAt(0).process, null)
+})
+
+test('redirecting stdout leaves stderr on the terminal and preserves the output order', () => {
+  const plain = streamsFrameAt(5000)
+  assert.deepEqual(plain.contents.terminal.map(line => line.channel), ['stderr', 'stdout', 'stderr'])
+  assert.equal(plain.showPasscode, false)
+  assert.equal(plain.showErrors, false)
+
+  const redirected = streamsFrameAt(11000)
+  assert.deepEqual(redirected.contents.passcode.map(line => line.channel), ['stdout'])
+  assert.deepEqual(redirected.contents.terminal.map(line => line.channel), ['stderr', 'stderr'])
+  assert.equal(redirected.showErrors, false)
+})
+
+test('prediction withholds port 2 routing and reveal separates both files', () => {
+  const pending = streamsFrameAt(14700 - 1)
+  assert.equal(pending.route.stderr, null)
+  assert.equal(pending.showErrors, true)
+  assert.equal(pending.quiet, false)
+  assert.equal(pending.inFlight.length, 0)
+  assert.equal(pending.contents.errors.length, 0)
+
+  const revealed = streamsFrameAt(14700)
+  assert.equal(revealed.route.stderr, 'errors')
+  assert.equal(revealed.contents.errors.length, 0)
+  const settled = streamsFrameAt(17500)
+  assert.equal(settled.quiet, true)
+  assert.deepEqual(settled.contents.terminal, [])
+  assert.deepEqual(settled.contents.passcode.map(line => line.channel), ['stdout'])
+  assert.deepEqual(settled.contents.errors.map(line => line.channel), ['stderr', 'stderr'])
+
+  const rewind = streamsFrameAt(2000)
+  assert.equal(rewind.showPasscode, false)
+  assert.equal(rewind.showErrors, false)
+  assert.deepEqual(rewind.inFlight.map(flight => flight.destination), ['terminal', 'terminal', 'terminal'])
+})
+
+test('listing dotfiles does not change the working directory', () => {
+  const before = filesystemFrameAt(8699)
+  const listed = filesystemFrameAt(8700)
+  assert.equal(before.cwd, 'user-home')
+  assert.equal(listed.cwd, before.cwd)
+  assert.equal(before.showDotfile, false)
+  assert.equal(listed.showDotfile, true)
+})
+
+test('relative and absolute traces resolve from different starting points', () => {
+  const relative = filesystemFrameAt(12300)
+  assert.equal(relative.trace?.kind, 'relative')
+  assert.equal(relative.cwd, 'workspace')
+  const resolving = filesystemFrameAt(14500)
+  assert.equal(resolving.trace?.kind, 'absolute')
+  assert.ok(resolving.trace!.progress > 0 && resolving.trace!.progress < 1)
+  assert.equal(resolving.cwd, 'workspace')
+  assert.equal(filesystemFrameAt(15500).cwd, 'quest')
+})
+
+test('rewinding from shared mounts restores the tree before the storage reveal', () => {
+  const mount = filesystemFrameAt(22500)
+  assert.equal(mount.mounts, 'shared')
+  assert.equal(mount.cwd, null)
+  assert.equal(filesystemFrameAt(20000).mounts, 'local')
+  const earlier = filesystemFrameAt(7000)
+  assert.equal(earlier.mounts, 'none')
+  assert.equal(earlier.showDotfile, false)
+  assert.equal(earlier.cwd, 'user-home')
 })

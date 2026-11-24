@@ -1,0 +1,39 @@
+.fs-stage { height: clamp(446px, calc(100dvh - 242px), 580px); }
+.fs-stage .story-art { top: calc(50% - 48px); height: calc(100% - 116px); }
+.fs-art { --fs-glow: #6fe3c1; --fs-local: #8dcae9; --fs-shared: #c4b8fc; }
+.fs-art text { pointer-events: none; }
+.fs-branches path { fill: none; stroke: #607986; stroke-width: 1.6; stroke-linejoin: round; }
+.fs-branches .fs-trace { stroke: var(--fs-glow); stroke-width: 3; }
+.fs-branches .fs-trace[data-trace='absolute'] { stroke: var(--story-accent); }
+.fs-mount-wires path { fill: none; stroke: var(--fs-local); stroke-width: 2; stroke-dasharray: 4 4; opacity: .8; }
+.fs-mount-wires .fs-shared-mount { stroke: var(--fs-shared); }
+.fs-compare rect { fill: #233740; stroke: #557181; }
+.fs-letter { fill: #d3e2e8; text-anchor: middle; font: 15px var(--mono); }
+.fs-node, .fs-storage { fill: #20343e; stroke: #617b88; stroke-width: 1.3; }
+.fs-name { fill: #edf5f7; text-anchor: middle; font: 16px var(--mono); }
+.fs-backed-by { fill: #c1d9e3; text-anchor: middle; font: 11px 'IBM Plex Sans', sans-serif; }
+.fs-backed-local .fs-node, .fs-backed-local .fs-backed-by { stroke: var(--fs-local); }
+.fs-backed-shared .fs-node, .fs-backed-shared .fs-backed-by { stroke: var(--fs-shared); }
+.fs-backed-local .fs-backed-by, .fs-backed-shared .fs-backed-by { stroke: none; }
+.fs-backed-local .fs-backed-by { fill: var(--fs-local); }
+.fs-backed-shared .fs-backed-by { fill: var(--fs-shared); }
+.fs-focus .fs-node { stroke: var(--story-accent); fill: #374851; stroke-width: 2; }
+.fs-dot-muted .fs-node { fill: #21323b; stroke-dasharray: 4 4; }
+.fs-dot-muted .fs-name { fill: #9aafb9; }
+.fs-pwd { pointer-events: none; }
+.fs-pwd rect { fill: #20554e; stroke: var(--fs-glow); }
+.fs-pwd circle { fill: var(--fs-glow); }
+.fs-pwd text { fill: #e5faf3; font: 11px var(--mono); }
+.fs-tray-rule { stroke: #506774; }
+.fs-small { fill: #b7ccd6; font: 14px 'IBM Plex Sans', sans-serif; }
+.fs-storage-name { fill: #eaf5f9; font: 600 16px 'IBM Plex Sans', sans-serif; }
+[data-lesson-part='local-disk'] .fs-storage { stroke: var(--fs-local); }
+[data-lesson-part='shared-storage'] .fs-storage { stroke: var(--fs-shared); }
+.fs-focus .fs-storage { fill: #354752; stroke-width: 2; }
+.fs-art :is(.story-hovered, [data-lesson-part][aria-pressed='true'], [data-lesson-part]:focus-visible) {
+  filter: drop-shadow(0 1px 3px #a0d4ec92);
+}
+
+@media (max-width: 690px) {
+  .fs-stage { height: clamp(452px, 115vw, 540px); }
+}
