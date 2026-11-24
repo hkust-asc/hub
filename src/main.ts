@@ -17,10 +17,9 @@ function navigationFromHash(): Action {
     : { type: 'browse', scene: 'cluster', topic: subject && Object.hasOwn(clusterTopics, subject) ? subject as ClusterTopicId : undefined }
 }
 let state: AppState = updateState({ ...initialState }, navigationFromHash())
-let playbackTimer: ReturnType<typeof setTimeout> | undefined
+let playbackTimer: ReturnType<typeof setInterval> | undefined
 let renderedInspector = ''
 let renderedScene: SceneId | undefined
-let renderedScenario: ScenarioId | undefined
 const visitedScenarios = new Set<ScenarioId>()
 app.innerHTML = createLayout()
 
@@ -29,7 +28,6 @@ function element<ElementType extends HTMLElement = HTMLElement>(identifier: stri
 }
 
 function dispatch(action: Action, recordHistory = true): void {
-  const previous = state
   state = updateState(state, action)
   if (action.type === 'start-scenario' || state.mode === 'scenario') visitedScenarios.add(state.scenario)
   render()
@@ -38,11 +36,10 @@ function dispatch(action: Action, recordHistory = true): void {
     else history.replaceState(null, '', routeForState())
   }
   if (action.type === 'browse' || action.type === 'navigate') element('page-title').focus({ preventScroll: true })
-  if (state.mode === 'scenario' && (action.type === 'select' || action.type === 'cluster-select')) element('subject-picker').focus()
-  if (previous.playing !== state.playing || previous.step !== state.step || previous.scenario !== state.scenario) {
-    clearTimeout(playbackTimer)
+  if (state.playing && !playbackTimer) playbackTimer = setInterval(() => dispatch({ type: 'tick' }), 4800)
+  if (!state.playing && playbackTimer) {
+    clearInterval(playbackTimer)
     playbackTimer = undefined
-    if (state.playing) playbackTimer = setTimeout(() => dispatch({ type: 'tick' }), scenarios[state.scenario].steps[state.step]!.holdMs)
   }
 }
 
@@ -57,15 +54,11 @@ function render(): void {
   const activeStage = currentScenario.steps[state.step]!
   const scenario = state.mode === 'scenario'
   const node = state.scene === 'a30'
-  const visual = scenario && node ? activeStage.visual : undefined
+  const nodeStep = activeStage.nodeStep ?? -1
   const software = !node && ['spack', 'lmod', 'slurm'].includes(state.clusterSelected)
   const activeNav = scenario ? state.scenario : node ? 'a30' : ['storage', 'fabric', 'spack', 'lmod', 'slurm'].includes(state.clusterSelected) ? state.clusterSelected : 'overview'
   element('cluster-view').hidden = node
   element('node-view').hidden = !node
-  element('workbench').classList.toggle('is-lesson', scenario)
-  element('lesson-copy').hidden = !scenario
-  element('inspection-detour').hidden = !state.inspecting
-  element<HTMLDetailsElement>('inspection-details').open = !scenario || state.inspecting
   const title = node ? 'A30 GPU node' : software ? clusterTopics[state.clusterSelected].name : state.clusterSelected === 'storage' ? 'Shared storage' : state.clusterSelected === 'fabric' ? 'Network fabric' : 'Cluster overview'
   element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
   element('breadcrumb-section').textContent = scenario ? currentScenario.name : software ? 'Software' : node ? 'Compute architecture' : 'System'
@@ -100,8 +93,8 @@ function render(): void {
     subjectElement.setAttribute('aria-pressed', String(selected))
     subjectElement.classList.toggle('is-selected', selected)
   })
-  element('cluster-stage').classList.toggle('storage-focused', scenario && activeStage.clusterTopic === 'storage')
-  document.querySelectorAll<SVGElement>('[data-family-link]').forEach(link => link.classList.toggle('is-active', link.dataset.familyLink === (scenario ? activeStage.clusterTopic : state.clusterSelected)))
+  element('cluster-stage').classList.toggle('storage-focused', scenario && state.clusterSelected === 'storage')
+  document.querySelectorAll<SVGElement>('[data-family-link]').forEach(link => link.classList.toggle('is-active', link.dataset.familyLink === state.clusterSelected))
   element('scenario-panel').hidden = !scenario
   element('explode-button').setAttribute('aria-pressed', String(state.exploded))
   element('explode-button').setAttribute('aria-label', state.exploded ? 'Assemble node layers' : 'Explode node layers')
@@ -109,54 +102,31 @@ function render(): void {
   element('local-button').setAttribute('aria-pressed', String(state.placement === 'local'))
   element('remote-button').setAttribute('aria-pressed', String(state.placement === 'remote'))
   const diagram = element('diagram-stage')
-  diagram.querySelector('svg')!.setAttribute('viewBox', scenario ? '20 90 850 480' : '0 0 900 570')
   diagram.classList.toggle('is-exploded', state.exploded)
   diagram.classList.toggle('is-scenario', scenario)
-  diagram.classList.toggle('has-buffer-state', Boolean(visual))
-  diagram.classList.toggle('is-playing', state.playing)
-  diagram.classList.toggle('is-allocated', visual?.allocated === true)
-  diagram.classList.toggle('is-computing', visual?.computing === true)
+  diagram.classList.toggle('is-allocated', scenario && nodeStep >= 0 && nodeStep < 5)
+  diagram.classList.toggle('is-computing', scenario && nodeStep === 3)
   diagram.classList.toggle('remote-placement', state.placement === 'remote')
   diagram.classList.toggle('show-locality', state.selected === 'numa' || scenario && state.placement === 'remote')
   diagram.dataset.stage = String(state.step)
   diagram.querySelectorAll<SVGElement>('[data-topic]').forEach(part => {
-    const selected = (!scenario || state.inspecting) && part.dataset.topic === state.selected
-    const focused = visual && (visual.focus.includes('host') && part.classList.contains(state.placement === 'local' ? 'bank-1' : 'bank-0') || visual.focus.includes('device') && part.classList.contains('gpu-0'))
-    part.classList.toggle('is-lesson-focus', Boolean(focused))
+    const selected = part.dataset.topic === state.selected
     part.classList.toggle('is-selected', selected)
     part.setAttribute('aria-pressed', String(selected))
   })
   diagram.querySelectorAll<SVGElement>('[data-annotation]').forEach(annotation => annotation.classList.toggle('is-selected', annotation.dataset.annotation === state.selected))
-  const activeLinks = transferPath(visual?.transfer ?? null, state.placement)
+  const activeLinks = scenario && node ? transferPath(nodeStep, state.placement) : []
   diagram.querySelectorAll<SVGElement>('[data-link]').forEach(connection => connection.classList.toggle('is-active', activeLinks.includes(connection.dataset.link as typeof activeLinks[number])))
   diagram.querySelectorAll<SVGElement>('[data-flow]').forEach(flow => {
     flow.classList.toggle('is-active', activeLinks.includes(flow.dataset.flow as typeof activeLinks[number]))
-    flow.classList.toggle('is-reversed', visual?.transfer === 'd2h')
+    flow.classList.toggle('is-reversed', nodeStep === 4)
   })
-  element('buffer-ledger').hidden = !visual
-  if (visual) {
-    element('host-buffer-state').textContent = visual.host
-    element('device-buffer-state').textContent = visual.device
-    element('host-buffer').classList.toggle('is-focused', visual.focus.includes('host'))
-    element('device-buffer').classList.toggle('is-focused', visual.focus.includes('device'))
-    const route = state.placement === 'remote' ? 'cross-socket + PCIe' : 'PCIe'
-    element('transfer-caption').textContent = visual.transfer
-      ? `${visual.transfer === 'h2d' ? 'H -> D / Host to device' : 'D -> H / Device to host'} / ${route} / State after copy`
-      : visual.computing ? 'State after the GPU kernel.' : 'No host/device copy in this step.'
-  }
   element('step-title').textContent = activeStage.title
   element('step-description').textContent = activeStage.description
   element('scenario-title').textContent = currentScenario.name
   element('step-count').textContent = `${String(state.step + 1).padStart(2, '0')} / ${String(currentScenario.steps.length).padStart(2, '0')}  ${activeStage.label}`
   element('step-command').hidden = !activeStage.command
   element('step-command').textContent = activeStage.command ?? ''
-  element('lesson-location').textContent = `${String(state.step + 1).padStart(2, '0')} / ${activeStage.location}`
-  element('playback-status').textContent = state.playing ? 'Auto-advance on' : state.inspecting ? 'Paused for inspection' : 'Your pace / Next when ready'
-  if (renderedScenario !== state.scenario) {
-    element('step-picker').innerHTML = currentScenario.steps.map((step, index) => `<option value="${index}">${index + 1}. ${step.label}</option>`).join('')
-    renderedScenario = state.scenario
-  }
-  element<HTMLSelectElement>('step-picker').value = String(state.step)
   const range = element<HTMLInputElement>('step-range')
   range.max = String(currentScenario.steps.length - 1)
   range.value = String(state.step)
@@ -167,7 +137,7 @@ function render(): void {
   const playButton = element<HTMLButtonElement>('play-button')
   playButton.innerHTML = icon(state.playing ? 'pause' : 'play')
   playButton.setAttribute('aria-label', state.playing ? 'Pause scenario' : state.step === currentScenario.steps.length - 1 ? 'Replay scenario' : 'Play scenario')
-  playButton.title = state.playing ? 'Pause automatic advancement' : 'Auto-advance at an authored reading pace'
+  playButton.title = playButton.getAttribute('aria-label')!
   createIcons({ icons: iconSet, attrs: { 'stroke-width': 1.65, 'aria-hidden': 'true' } })
 }
 
@@ -184,7 +154,7 @@ app.addEventListener('click', event => {
     dispatch({ type: 'browse', scene: 'cluster', topic: browseTopic as ClusterTopicId })
   }
   const selectedScenario = target.closest<HTMLElement>('[data-scenario]')?.dataset.scenario
-  if (selectedScenario === 'first-job') {
+  if (selectedScenario === 'first-job' || selectedScenario === 'gpu-copy') {
     closeNavigation()
     dispatch(visitedScenarios.has(selectedScenario) && state.scenario === selectedScenario ? { type: 'mode', mode: 'scenario' } : { type: 'start-scenario', scenario: selectedScenario })
     element('page-title').focus({ preventScroll: true })
@@ -218,19 +188,6 @@ element<HTMLSelectElement>('subject-picker').addEventListener('change', event =>
   dispatch(state.scene === 'a30' ? { type: 'select', topic: subject as TopicId } : { type: 'cluster-select', topic: subject as ClusterTopicId })
 })
 element<HTMLInputElement>('step-range').addEventListener('input', event => dispatch({ type: 'step', step: Number((event.target as HTMLInputElement).value) }))
-element<HTMLSelectElement>('step-picker').addEventListener('change', event => dispatch({ type: 'step', step: Number((event.target as HTMLSelectElement).value) }))
-element('return-to-lesson').addEventListener('click', () => {
-  dispatch({ type: 'return-to-lesson' })
-  element('step-title').focus()
-})
-element<HTMLDetailsElement>('inspection-details').addEventListener('toggle', event => {
-  if (state.mode !== 'scenario') return
-  const open = (event.target as HTMLDetailsElement).open
-  if (open === state.inspecting) return
-  dispatch(open
-    ? state.scene === 'a30' ? { type: 'select', topic: state.selected } : { type: 'cluster-select', topic: state.clusterSelected }
-    : { type: 'return-to-lesson' })
-})
 element('leave-scenario').addEventListener('click', () => dispatch({ type: 'mode', mode: 'explore' }))
 element('restart-scenario').addEventListener('click', () => dispatch({ type: 'start-scenario', scenario: state.scenario }))
 element('local-button').addEventListener('click', () => dispatch({ type: 'placement', placement: 'local' }))
@@ -328,26 +285,10 @@ element('download-button').addEventListener('click', () => {
     destination.removeAttribute('aria-pressed')
   })
   clone.setAttribute('width', '1200')
-  const visual = state.mode === 'scenario' ? scenarios[state.scenario].steps[state.step]!.visual : undefined
-  clone.setAttribute('viewBox', visual ? '0 0 900 660' : '0 0 900 590')
-  clone.setAttribute('height', visual ? '880' : '787')
-  if (visual) {
-    const caption = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-    caption.setAttribute('x', '84')
-    caption.setAttribute('y', '580')
-    caption.setAttribute('fill', '#425968')
-    caption.setAttribute('font-size', '13')
-    caption.setAttribute('font-family', 'sans-serif')
-    caption.textContent = `H / Host RAM: ${visual.host}. D / GPU 0 memory: ${visual.device}.`
-    clone.append(caption)
-    const transferCaption = caption.cloneNode(true) as SVGTextElement
-    transferCaption.setAttribute('y', '605')
-    transferCaption.textContent = element('transfer-caption').textContent
-    clone.append(transferCaption)
-  }
+  clone.setAttribute('height', '760')
   const note = document.createElementNS('http://www.w3.org/2000/svg', 'text')
   note.setAttribute('x', '84')
-  note.setAttribute('y', visual ? '635' : '570')
+  note.setAttribute('y', '548')
   note.setAttribute('fill', '#5e6670')
   note.setAttribute('font-size', '11')
   note.setAttribute('font-family', 'sans-serif')

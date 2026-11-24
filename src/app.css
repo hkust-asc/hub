@@ -88,9 +88,7 @@ h1 { font-size: 29px; line-height: 1.25; font-weight: 500; }
 .placement-control { display: flex; border: 1px solid #dfe5e9; border-radius: 4px; padding: 3px; flex-shrink: 0; background: #f8f9fa; }
 .placement-control button { font-size: 10px; padding: 6px 10px; border-radius: 2px; color: #8a959f; background: transparent; white-space: nowrap; }
 .placement-control button[aria-pressed='true'] { background: #fff; color: #506781; box-shadow: 0 1px 3px #152b3914; }
-.context-panel { border-left: 1px solid var(--line); min-width: 0; }
-.inspector { padding: 24px 23px; min-width: 0; }
-.inspection-details > summary { display: none; }
+.inspector { border-left: 1px solid var(--line); padding: 24px 23px; min-width: 0; }
 .subject-picker-label { display: block; font: 9px var(--mono); color: #99a4ad; text-transform: uppercase; margin-bottom: 9px; }
 #subject-picker { width: 100%; min-width: 0; border: 1px solid #e2e7ec; border-radius: 4px; color: #687b8e; background: #fafbfc; padding: 9px 24px 9px 9px; font: 11px 'IBM Plex Sans', sans-serif; margin-bottom: 27px; text-overflow: ellipsis; }
 select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
@@ -121,7 +119,7 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .open-scene-button { display: flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%; padding: 11px 13px; border-radius: 4px; color: #fff; background: #597ba9; font-size: 11px; margin-top: 20px; }
 .open-scene-button:hover { background: #496b99; }
 .open-scene-button svg { width: 14px; height: 14px; }
-.lesson-player { padding: 10px 18px 12px; border-top: 1px solid var(--line); background: #fff; }
+.lesson-player { padding: 18px 22px 20px; border-top: 1px solid var(--line); background: #fff; }
 .player-heading { display: flex; align-items: center; gap: 15px; }
 .scenario-transport { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .play-button { width: 34px; height: 34px; padding: 0; border-radius: 4px; background: #526b85; color: #fff; display: grid; place-items: center; }
@@ -131,11 +129,11 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .player-identity h2 { color: #60758a; font-size: 11px; font-weight: 500; line-height: 1.5; }
 #step-count { color: #9aa6b0; font: 8px/1.8 var(--mono); }
 .player-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-.step-range { appearance: none; display: block; width: 100%; height: 24px; border-radius: 2px; background: transparent; margin: 2px 0; cursor: pointer; }
-.step-range::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, #d78574 var(--progress, 0%), #e8edf1 var(--progress, 0%)); }
-.step-range::-webkit-slider-thumb { appearance: none; margin-top: -4px; width: 12px; height: 12px; border-radius: 50%; background: #c98170; }
-.step-range::-moz-range-track { height: 3px; background: linear-gradient(to right, #d78574 var(--progress, 0%), #e8edf1 var(--progress, 0%)); }
-.step-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #c98170; }
+.step-range { appearance: none; display: block; width: 100%; height: 3px; border-radius: 2px; background: linear-gradient(to right, #d78574 var(--progress, 0%), #e8edf1 var(--progress, 0%)); margin: 16px 0 18px; cursor: pointer; }
+.step-range::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #c98170; }
+.step-range::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: #c98170; }
+.step-copy h3 { font-size: 13px; font-weight: 500; color: #536573; line-height: 1.5; }
+.step-copy p { font-size: 11px; line-height: 1.85; color: #8a98a3; margin-top: 7px; }
 #step-command { display: block; margin-top: 11px; padding: 6px 9px; border-left: 2px solid #bdcbc7; font: 10px/1.7 var(--mono); color: #6f8b7c; background: #f1f5f2; overflow-wrap: anywhere; }
 .section-kicker { font: 9px var(--mono); color: #87919a; }
 .solid { stroke: #35483d25; }
@@ -170,9 +168,8 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .transfer-link { stroke: #8aa99b; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
 .transfer-link.is-active { stroke: #d75d48; stroke-width: 4; opacity: 1; }
 .transfer-flow { stroke: #ffcf8c; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 2 24; display: none; pointer-events: none; }
-.transfer-flow.is-active { display: block; }
-.is-playing .transfer-flow.is-active { animation: flow .85s linear 2; }
-.is-playing .transfer-flow.is-reversed { animation-direction: reverse; }
+.transfer-flow.is-active { display: block; animation: flow .85s linear infinite; }
+.transfer-flow.is-reversed { animation-direction: reverse; }
 .bus-hit { stroke: transparent; stroke-width: 19; fill: none; cursor: pointer; }
 .bus-target.is-selected .bus-hit, .bus-target:focus-visible .bus-hit { stroke: #d7584625; }
 .allocation-label { display: none; }
@@ -181,8 +178,7 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .is-allocated .allocation-label { display: block; }
 .is-allocated .gpu-0 { filter: drop-shadow(0 0 5px #527fc570); }
 .is-allocated .gpu-unit:not(.gpu-0) { opacity: .5; }
-.is-computing .gpu-0 .device-led { fill: #d75846; }
-.is-playing.is-computing .gpu-0 .device-led { animation: computing 1.2s ease-in-out 2; }
+.is-computing .gpu-0 .device-led { fill: #d75846; animation: computing 1.2s ease-in-out infinite; }
 dialog { border: 1px solid #dbe1e7; border-radius: 8px; padding: 26px 30px 30px; width: 510px; max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); color: var(--ink); box-shadow: 0 24px 100px #15243424; }
 dialog::backdrop { background: #26323e55; backdrop-filter: blur(3px); }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -215,56 +211,6 @@ dialog h3 { font-size: 12px; font-weight: 500; margin-top: 24px; }
 .cluster-access-label { font: 8px var(--mono); fill: #9ba7ae; }
 .storage-focused .storage-access-link { stroke: #568776; stroke-width: 3; }
 
-.workspace:has(.is-lesson) { padding: 18px 24px; }
-.workspace:has(.is-lesson) .workspace-heading { margin-bottom: 16px; }
-.is-lesson { grid-template-columns: minmax(0, 1fr) 310px; }
-.is-lesson .diagram-stage { min-height: 0; flex: none; }
-.is-lesson .node-diagram { height: clamp(210px, 32dvh, 350px); max-height: none; width: 100%; margin: 0; }
-.is-lesson .cluster-diagram { max-height: 390px; }
-.is-lesson .placement-strip { min-height: 49px; padding-block: 6px; }
-.is-lesson .diagram-scale, .has-buffer-state .allocation-label { display: none; }
-.is-lesson .part.is-lesson-focus { filter: drop-shadow(0 0 5px #5375bd90); }
-.is-lesson .part.is-lesson-focus .solid { stroke: #5375bd; stroke-width: 1.5; }
-.is-lesson .part.is-selected { opacity: 1; filter: drop-shadow(0 0 5px #d7584680); }
-.is-lesson .part.is-selected .solid { stroke: var(--accent); }
-.buffer-markers { display: none; pointer-events: none; }
-.has-buffer-state .buffer-markers { display: block; }
-.buffer-markers path { stroke: #536e65; stroke-width: 2; fill: none; }
-.buffer-markers circle { stroke: white; stroke-width: 3; fill: var(--memory); }
-.buffer-markers text { fill: white; font: 24px 'IBM Plex Sans', sans-serif; font-weight: 600; }
-.device-marker circle { fill: var(--gpu); }
-.device-marker path { stroke: var(--gpu); }
-.host-marker-remote, .remote-placement .host-marker-local { display: none; }
-.remote-placement .host-marker-remote { display: block; }
-.is-exploded .host-marker { transform: translateY(-39px); }
-.is-exploded .device-marker { transform: translateY(-48px); }
-.buffer-ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); background: #fbfcfc; }
-.buffer-card { display: flex; gap: 9px; align-items: center; border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; }
-.buffer-key { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; color: #fff; background: var(--memory); font: 13px var(--mono); }
-.device-buffer .buffer-key { background: var(--gpu); }
-.buffer-name { display: block; font-size: 11px; color: #5a6977; }
-.buffer-card strong { display: block; font-size: 13px; font-weight: 500; line-height: 1.5; }
-.host-buffer.is-focused { background: #eff7f3; border-color: #6a9d8d; }
-.device-buffer.is-focused { background: #eff3fc; border-color: #7896c6; }
-#transfer-caption { grid-column: 1 / -1; font-size: 11px; line-height: 1.5; color: #596e7c; }
-.lesson-copy { padding: 24px 23px 18px; }
-.lesson-location { font: 10px/1.6 var(--mono); color: #5d7794; margin-bottom: 15px; }
-.step-copy h2 { font-size: 21px; font-weight: 500; line-height: 1.35; }
-.lesson-copy .step-copy p { font-size: 14px; line-height: 1.75; color: #526471; margin-top: 14px; }
-.lesson-caveat { color: #697785; font-size: 11px; line-height: 1.6; margin-top: 18px; }
-.is-lesson .inspection-details { border-top: 1px solid var(--line); }
-.is-lesson .inspection-details > summary { display: list-item; cursor: pointer; color: #5c7189; padding: 15px 23px; font-size: 13px; }
-summary:focus-visible, input:focus-visible { outline: 2px solid var(--gpu); outline-offset: -2px; }
-#inspection-detour { margin-top: 16px; border-left: 2px solid var(--accent); padding-left: 12px; }
-#inspection-detour p { color: #7c584e; font-size: 12px; }
-.return-to-lesson { display: flex; align-items: center; gap: 8px; min-height: 44px; background: transparent; color: #526b85; padding: 4px 0; font-size: 13px; }
-.is-lesson .inspector { padding-top: 6px; }
-.is-lesson #subject-picker { margin-bottom: 18px; }
-.scenario-transport .icon-button, .player-actions .icon-button, .scenario-transport .play-button { width: 40px; height: 40px; }
-.player-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-#playback-status { color: #617382; font-size: 11px; }
-#step-picker { font: 12px 'IBM Plex Sans', sans-serif; color: #526b85; border: 1px solid var(--line); border-radius: 4px; background: #fafbfc; padding: 6px; max-width: 48%; }
-
 @media (min-width: 1600px) {
   .workspace { padding: 35px 42px; }
   .workbench { grid-template-columns: minmax(0, 1fr) 310px; }
@@ -282,22 +228,12 @@ summary:focus-visible, input:focus-visible { outline: 2px solid var(--gpu); outl
 }
 @media (max-width: 1100px) {
   .workbench { grid-template-columns: 1fr; }
-  .context-panel { border-left: 0; border-top: 1px solid var(--line); }
-  .inspector { display: grid; grid-template-columns: 180px minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 180px minmax(0, 1fr); column-gap: 28px; align-items: start; }
   .subject-picker-label, #subject-picker { grid-column: 1; }
   #inspector-content { grid-column: 2; grid-row: 1 / 4; }
   .subject-picker-label { margin-top: 3px; }
   .topic-description { margin-top: 15px; }
   .diagram-stage { min-height: 400px; }
-  .is-lesson { grid-template-columns: 1fr; }
-  .is-lesson .context-panel { grid-row: 1; border-top: 0; }
-  .is-lesson .lesson-copy { padding: 16px 20px; }
-  .is-lesson .lesson-location { margin-bottom: 8px; }
-  .is-lesson .step-copy h2 { font-size: 19px; }
-  .is-lesson .step-copy p { font-size: 13px; line-height: 1.6; margin-top: 8px; }
-  .is-lesson .lesson-caveat { margin-top: 10px; }
-  .is-lesson .lesson-player { order: -1; }
-  .is-lesson .view-toolbar { order: 1; border-top: 1px solid var(--line); border-bottom: 0; }
 }
 @media (max-width: 900px) {
   .app-layout { display: block; }
@@ -348,6 +284,7 @@ summary:focus-visible, input:focus-visible { outline: 2px solid var(--gpu); outl
   .topic-properties > div { font-size: 11px; }
   .subject-notes summary { font-size: 12px; }
   .subject-notes > p { font-size: 12px; }
+  .lesson-player { padding: 16px 15px 19px; }
   .player-heading { gap: 8px; }
   .scenario-transport { gap: 0; }
   .scenario-transport .icon-button { width: 26px; }
@@ -356,18 +293,8 @@ summary:focus-visible, input:focus-visible { outline: 2px solid var(--gpu); outl
   #step-count { font-size: 7px; }
   .player-actions { gap: 0; }
   .player-actions .icon-button { width: 26px; }
-  .workspace:has(.is-lesson) { padding: 14px 10px; }
-  .workspace:has(.is-lesson) h1 { font-size: 23px; }
-  .is-lesson .node-diagram { height: 225px; }
-  .is-lesson .inspection-details > summary { padding: 12px 20px; }
-  .is-lesson .lesson-player { padding: 8px 12px 10px; }
-  .scenario-transport .icon-button, .player-actions .icon-button, .scenario-transport .play-button { width: 36px; height: 44px; }
-  .player-identity h2 { font-size: 11px; }
-  #step-count { font-size: 9px; }
-  .buffer-ledger { padding: 10px 12px; gap: 7px; }
-  .buffer-card { padding: 7px; gap: 7px; }
-  .buffer-card strong { font-size: 12px; }
-  #step-picker { min-height: 36px; }
+  .step-copy h3 { font-size: 13px; }
+  .step-copy p { font-size: 12px; }
   dialog { padding: 20px; }
 }
 @media (max-width: 360px) {

@@ -1,39 +1,39 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { initialState, jobSteps, transferPath, updateState } from '../src/model.ts'
-import { beats, durationMs, frameAt, positionAt, updatePlayback } from '../src/host-to-gpu/story.ts'
-import type { PlaybackState } from '../src/host-to-gpu/story.ts'
+import { initialState, jobSteps, scenarios, stages, transferPath, updateState } from '../src/model.ts'
+import { frameAt as gpuFrameAt, timeline as gpuTimeline } from '../src/host-to-gpu/story.ts'
+import { frameAt as sshFrameAt, timeline as sshTimeline } from '../src/ssh-tmux/story.ts'
+import type { PlaybackState } from '../src/timed-lesson/timeline.ts'
 
 test('a local H2D path does not cross the inter-socket link', () => {
-  assert.deepEqual(transferPath('h2d', 'local'), ['memory-local', 'pcie-link', 'gpu-link'])
+  assert.deepEqual(transferPath(2, 'local'), ['memory-local', 'pcie-link', 'gpu-link'])
 })
 
 test('remote placement adds an inter-socket crossing', () => {
-  assert.deepEqual(transferPath('h2d', 'remote'), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
+  assert.deepEqual(transferPath(2, 'remote'), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
 })
 
 test('D2H reverses the same transfer path without changing H2D', () => {
-  const forward = transferPath('h2d', 'remote')
-  assert.deepEqual(transferPath('d2h', 'remote'), forward.toReversed())
-  assert.deepEqual(transferPath('h2d', 'remote'), forward)
+  const forward = transferPath(2, 'remote')
+  assert.deepEqual(transferPath(4, 'remote'), forward.toReversed())
+  assert.deepEqual(transferPath(2, 'remote'), forward)
 })
 
-test('a step without a copy shows neither placement route', () => {
-  assert.deepEqual(transferPath(null, 'local'), [])
-  assert.deepEqual(transferPath(null, 'remote'), [])
+test('allocation, preparation, computation, and completion do not show a transfer', () => {
+  for (const step of [0, 1, 3, 5]) assert.deepEqual(transferPath(step, 'local'), [])
 })
 
 test('scenario navigation clamps at its boundaries and selects the matching topic', () => {
   assert.equal(updateState(initialState, { type: 'step', step: -1 }).step, 0)
   const last = updateState(initialState, { type: 'step', step: 100 })
-  assert.equal(last.step, jobSteps.length - 1)
+  assert.equal(last.step, stages.length - 1)
   assert.equal(last.selected, 'slurm')
 })
 
 test('playback reaches completion, stops, and can replay from the beginning', () => {
   let state = updateState(initialState, { type: 'play' })
-  for (let count = 0; count < jobSteps.length; count++) state = updateState(state, { type: 'tick' })
-  assert.equal(state.step, jobSteps.length - 1)
+  for (let count = 0; count < stages.length; count++) state = updateState(state, { type: 'tick' })
+  assert.equal(state.step, stages.length - 1)
   assert.equal(state.playing, false)
   state = updateState(state, { type: 'play' })
   assert.equal(state.step, 0)
@@ -50,7 +50,7 @@ test('exploration and explicit selection stop playback without losing placement'
 
 test('reset restores the initial placement and view while preserving the active mode', () => {
   const changed = { ...initialState, mode: 'scenario' as const, placement: 'remote' as const, exploded: true, step: 3, playing: true }
-  assert.deepEqual(updateState(changed, { type: 'reset' }), { ...initialState, mode: 'scenario', clusterSelected: 'login', selected: 'cpu' })
+  assert.deepEqual(updateState(changed, { type: 'reset' }), { ...initialState, mode: 'scenario', scene: 'a30', selected: 'slurm' })
 })
 
 test('a connected scenario owns the scene and subject at each step', () => {
@@ -67,10 +67,10 @@ test('a connected scenario owns the scene and subject at each step', () => {
 
 test('the connected scenario enters the node and returns to shared storage', () => {
   const started = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  const transferIndex = jobSteps.findIndex(step => step.visual?.transfer === 'h2d')
+  const transferIndex = jobSteps.findIndex(step => step.nodeStep === 2)
   const transfer = updateState(started, { type: 'step', step: transferIndex })
   assert.equal(transfer.scene, 'a30')
-  assert.deepEqual(transferPath(jobSteps[transfer.step]!.visual!.transfer, 'remote'), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
+  assert.deepEqual(transferPath(jobSteps[transfer.step]!.nodeStep!, 'remote'), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
   const save = updateState(transfer, { type: 'step', step: 8 })
   assert.equal(save.scene, 'cluster')
   assert.equal(save.clusterSelected, 'storage')
@@ -89,6 +89,27 @@ test('manual navigation pauses without losing scenario position or node placemen
   const resumed = updateState(overview, { type: 'play' })
   assert.equal(resumed.scene, 'a30')
   assert.equal(resumed.step, 5)
+})
+
+test('switching scenarios resets the step and cannot retain the previous scene', () => {
+  const last = updateState(updateState(initialState, { type: 'start-scenario', scenario: 'first-job' }), { type: 'step', step: 9 })
+  const gpu = updateState(last, { type: 'start-scenario', scenario: 'gpu-copy' })
+  assert.equal(gpu.step, 0)
+  assert.equal(gpu.scene, 'a30')
+  assert.equal(gpu.selected, 'slurm')
+})
+
+test('both scenario lengths clamp, finish, and replay independently', () => {
+  for (const scenario of ['gpu-copy', 'first-job'] as const) {
+    let state = updateState(initialState, { type: 'start-scenario', scenario })
+    state = updateState(state, { type: 'step', step: 100 })
+    assert.equal(state.step, scenarios[scenario].steps.length - 1)
+    state = updateState(state, { type: 'play' })
+    assert.equal(state.step, 0)
+    for (let tick = 0; tick <= scenarios[scenario].steps.length; tick++) state = updateState(state, { type: 'tick' })
+    assert.equal(state.playing, false)
+    assert.equal(state.step, scenarios[scenario].steps.length - 1)
+  }
 })
 
 test('browsing a software subject selects its owning scene and pauses the journey', () => {
@@ -124,105 +145,97 @@ test('resetting the node view does not rewind, pause, or change the active scena
   assert.deepEqual(updateState(running, { type: 'reset-view' }), { ...running, placement: 'local', exploded: false })
 })
 
-test('inspection is a reversible detour, including at the final step', () => {
-  for (const [step, action] of [
-    [5, { type: 'select', topic: 'nic' }],
-    [jobSteps.length - 1, { type: 'cluster-select', topic: 'lmod' }],
-  ] as const) {
-    const lesson = updateState({ ...initialState, placement: 'remote' }, { type: 'step', step })
-    const inspected = updateState({ ...lesson, playing: true }, action)
-    assert.equal(inspected.inspecting, true)
-    assert.equal(inspected.playing, false)
-    assert.equal(inspected.step, lesson.step)
-    assert.equal(action.type === 'select' ? inspected.selected : inspected.clusterSelected, action.topic)
-    assert.deepEqual(updateState(inspected, { type: 'return-to-lesson' }), lesson)
+test('at normal speed both timed lessons take twice their authored duration', () => {
+  const playing: PlaybackState = { positionMs: 0, startedAt: 0, inspection: null, rate: 1 }
+  for (const timeline of [gpuTimeline, sshTimeline]) {
+    const nextBeat = timeline.beats[1]!.startMs * 2
+    assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat - 1)).index, 0)
+    assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat)).index, 1)
+    assert.equal(timeline.positionAt(playing, timeline.durationMs * 2 - 1), timeline.durationMs - 0.5)
+    assert.equal(timeline.positionAt(playing, timeline.durationMs * 2), timeline.durationMs)
   }
 })
 
-test('resuming after inspection restores the teaching subject before advancing', () => {
-  const lesson = updateState(initialState, { type: 'step', step: 5 })
-  const inspected = updateState(lesson, { type: 'select', topic: 'cpu' })
-  const resumed = updateState(inspected, { type: 'play' })
-  assert.equal(resumed.inspecting, false)
-  assert.equal(resumed.selected, 'pcie')
-  assert.equal(resumed.step, 5)
-  assert.equal(resumed.playing, true)
-  const next = updateState(resumed, { type: 'tick' })
-  assert.equal(next.step, 6)
-  assert.equal(next.selected, 'gpu')
+test('changing playback speed preserves the fractional playhead and inspection intent', () => {
+  const state: PlaybackState = { positionMs: 4000, startedAt: 1000, inspection: null, rate: 1 }
+  const fast = gpuTimeline.update(state, { type: 'rate', rate: 2 }, 1885)
+  assert.equal(gpuTimeline.positionAt(fast, 1885), 4442.5)
+  const inspected = gpuTimeline.update(fast, { type: 'inspect' }, 2000)
+  const slow = gpuTimeline.update(inspected, { type: 'rate', rate: .5 }, 6000)
+  assert.equal(gpuTimeline.positionAt(slow, 6500), 4557.5)
+  const resumed = gpuTimeline.update(slow, { type: 'inspect' }, 7000)
+  assert.equal(gpuTimeline.positionAt(resumed, 8000), 4807.5)
 })
 
-test('seeking reconstructs a step independently of playback and inspection history', () => {
-  const start = updateState({ ...initialState, placement: 'remote' }, { type: 'start-scenario', scenario: 'first-job' })
-  const last = jobSteps.length - 1
-  let traveled = updateState(start, { type: 'play' })
-  for (let tick = 0; tick < last; tick++) traveled = updateState(traveled, { type: 'tick' })
-  traveled = updateState(traveled, { type: 'cluster-select', topic: 'spack' })
-  for (let step = last; step >= 0; step--) {
-    traveled = updateState(traveled, { type: 'step', step })
-    assert.deepEqual(traveled, updateState(start, { type: 'step', step }))
-  }
+test('copying retains the source, and cross-socket changes the arrival and the callout', () => {
+  const copyIn = gpuTimeline.beats.find(beat => beat.id === 'copy-in')!.startMs
+  const local = gpuFrameAt(copyIn + 2800, 'local')
+  assert.equal(local.host, 'Input')
+  assert.equal(local.device, 'Input')
+  assert.equal(local.copy?.progress, null)
+  const remote = gpuFrameAt(copyIn + 2800, 'remote')
+  assert.equal(remote.host, 'Input')
+  assert.equal(remote.device, null)
+  assert.equal(remote.note.anchor, 'socket-link')
+  assert.ok(remote.copy?.progress)
+  assert.equal(gpuFrameAt(copyIn + 3300, 'remote').device, 'Input')
 })
 
-test('changing placement pauses on the same copy step and changes only its route', () => {
-  const copying = updateState(updateState(initialState, { type: 'step', step: 5 }), { type: 'play' })
-  const remote = updateState(copying, { type: 'placement', placement: 'remote' })
-  assert.deepEqual(remote, { ...copying, placement: 'remote', playing: false })
-  assert.deepEqual(transferPath(jobSteps[remote.step]!.visual!.transfer, remote.placement), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
+test('seeking reconstructs computation, the return copy, and buffer release', () => {
+  const done = gpuFrameAt(gpuTimeline.durationMs, 'local')
+  assert.equal(done.host, null)
+  assert.equal(done.device, null)
+  const compute = gpuTimeline.beats.find(beat => beat.id === 'compute')!.startMs
+  assert.equal(gpuFrameAt(compute + 1, 'local').signal?.kind, 'launch')
+  assert.equal(gpuFrameAt(compute + 3199, 'local').device, 'Input')
+  const computed = gpuFrameAt(compute + 3200, 'local')
+  assert.equal(computed.host, 'Input')
+  assert.equal(computed.device, 'Result')
+  assert.equal(computed.copy, null)
+  const copyOut = gpuTimeline.beats.find(beat => beat.id === 'copy-out')!.startMs
+  assert.equal(gpuFrameAt(copyOut + 2499, 'local').host, 'Input')
+  const copied = gpuFrameAt(copyOut + 2500, 'local')
+  assert.equal(copied.host, 'Result')
+  assert.equal(copied.device, 'Result')
 })
 
-test('leaving or restarting the walkthrough clears inspection', () => {
-  const lesson = updateState(initialState, { type: 'step', step: 6 })
-  const inspected = updateState(lesson, { type: 'select', topic: 'cpu' })
-  const explored = updateState(inspected, { type: 'mode', mode: 'explore' })
-  assert.equal(explored.inspecting, false)
-  assert.equal(explored.selected, 'cpu')
-  const restarted = updateState(inspected, { type: 'start-scenario', scenario: 'first-job' })
-  assert.equal(restarted.inspecting, false)
-  assert.equal(restarted.step, 0)
-  assert.equal(restarted.scene, 'cluster')
-  assert.equal(restarted.clusterSelected, 'login')
+test('the SSH loss and the foreground terminal closing are distinct moments', () => {
+  const shell = sshTimeline.beats.find(beat => beat.id === 'shell')!.startMs
+  const dropped = sshFrameAt(shell + 2600)
+  assert.equal(dropped.connection.status, 'lost')
+  assert.equal(dropped.shell, 'open')
+  assert.equal(dropped.process?.status, 'running')
+  const closed = sshFrameAt(shell + 3400)
+  assert.equal(closed.shell, 'closed')
+  assert.equal(closed.process?.status, 'stopped')
+  assert.equal(closed.process?.progress, sshFrameAt(shell + 5000).process?.progress)
+  assert.equal(closed.file, false)
 })
 
-const stopped: PlaybackState = { positionMs: 0, startedAt: null, inspection: null }
-
-test('the GPU lesson advances across a beat boundary and resumes from a fractional position', () => {
-  const starting = updatePlayback(stopped, { type: 'play' }, 100)
-  const boundary = beats[1]!.startMs
-  assert.equal(frameAt(positionAt(starting, 100 + boundary - 1)).index, 0)
-  assert.equal(frameAt(positionAt(starting, 100 + boundary)).index, 1)
-  const paused = updatePlayback(starting, { type: 'pause' }, 100 + boundary + 329.5)
-  assert.equal(positionAt(paused, 30000), boundary + 329.5)
-  const resumed = updatePlayback(paused, { type: 'play' }, 30000)
-  assert.equal(positionAt(resumed, 30190), boundary + 519.5)
+test('detaching leaves SSH connected, and the task advances across the later disconnect', () => {
+  const detach = sshTimeline.beats.find(beat => beat.id === 'detach')!.startMs
+  const unplugged = sshFrameAt(detach + 600)
+  assert.equal(unplugged.tmux, 'detached')
+  assert.equal(unplugged.connection.status, 'connected')
+  const offline = sshFrameAt(detach + 4000)
+  assert.equal(offline.connection.status, 'lost')
+  assert.equal(offline.shell, 'closed')
+  assert.equal(offline.process?.terminal, 'tmux')
+  assert.equal(offline.process?.status, 'running')
+  assert.ok(offline.process!.progress > unplugged.process!.progress)
 })
 
-test('GPU lesson inspection preserves the exact timestamp and prior playback intent', () => {
-  const playing = updatePlayback(stopped, { type: 'play' }, 1000)
-  for (const state of [playing, updatePlayback(playing, { type: 'pause' }, 2477.5)]) {
-    const inspection = updatePlayback(state, { type: 'inspect' }, 2477.5)
-    assert.equal(positionAt(inspection, 9000), 1477.5)
-    const back = updatePlayback(inspection, { type: 'inspect' }, 9000)
-    assert.equal(positionAt(back, 9000), 1477.5)
-    assert.equal(positionAt(back, 9100), state.startedAt === null ? 1477.5 : 1577.5)
-  }
-})
-
-test('seeking backward reconstructs the in-flight and settled copy independently', () => {
-  const start = beats.find(beat => beat.copy?.direction === 'h2d')!.startMs
-  const later = updatePlayback(stopped, { type: 'seek', positionMs: durationMs }, 0)
-  const during = frameAt(positionAt(updatePlayback(later, { type: 'seek', positionMs: start + 1350 }, 4000), 4000))
-  const after = frameAt(start + 3000)
-  assert.equal(during.packetProgress, 0.5)
-  assert.notEqual(during.note, after.note)
-  assert.equal(after.packetProgress, null)
-  assert.equal(frameAt(beats[4]!.startMs + 1350).beat.copy?.direction, 'd2h')
-})
-
-test('the GPU lesson stops at the final beat and play after completion starts at zero', () => {
-  const running = updatePlayback(stopped, { type: 'play' }, 0)
-  const end = updatePlayback(running, { type: 'pause' }, durationMs + 500)
-  assert.equal(frameAt(positionAt(end, durationMs + 500)).beat.label, 'Finish')
-  const replay = updatePlayback(end, { type: 'play' }, durationMs + 500)
-  assert.equal(positionAt(replay, durationMs + 500), 0)
+test('reattaching does not restart the task and seeking before completion hides the file', () => {
+  const reconnect = sshTimeline.beats.find(beat => beat.id === 'return')!.startMs
+  const done = sshFrameAt(sshTimeline.durationMs)
+  assert.equal(done.process?.status, 'done')
+  assert.equal(done.file, true)
+  const before = sshFrameAt(reconnect + 1349)
+  const attached = sshFrameAt(reconnect + 1350)
+  assert.equal(before.tmux, 'detached')
+  assert.equal(attached.tmux, 'attached')
+  assert.ok(attached.process!.progress >= before.process!.progress)
+  assert.equal(sshFrameAt(reconnect + 2199).file, false)
+  assert.equal(sshFrameAt(0).tmux, 'absent')
+  assert.equal(sshFrameAt(0).process, null)
 })

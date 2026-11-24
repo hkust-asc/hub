@@ -1,0 +1,47 @@
+.ssh-art { --ssh-edge: #5b727f; --ssh-link: #8fd9ec; --ssh-loss: #f49c90; --ssh-working: #6fe3c1; }
+.ssh-art text { pointer-events: none; }
+.ssh-art .ssh-label { fill: #edf5f7; font-size: 19px; font-weight: 600; }
+.ssh-art .ssh-secondary { fill: #bcdae4; font-size: 15px; }
+.ssh-art .ssh-code { fill: #f0f6f6; font: 15px var(--mono); }
+.ssh-plinth-edge { fill: #16262f; stroke: #3c5563; stroke-width: 1.5; }
+.ssh-plinth { fill: #273d49; stroke: var(--ssh-edge); stroke-width: 1.5; }
+.ssh-face-line { fill: none; stroke: #7794a2; stroke-width: 1.2; }
+.ssh-laptop-frame { fill: #5c7688; stroke: #98b2bf; stroke-width: 1.5; }
+.ssh-screen { fill: #142c35; }
+.ssh-laptop-deck { fill: #6a8797; }
+.ssh-laptop-depth { fill: #2c4452; stroke: #5b7787; }
+.ssh-online-light { fill: var(--ssh-working); }
+.ssh-tile { fill: #1b2d39; stroke: var(--ssh-edge); stroke-width: 1.5; }
+.ssh-session { fill: #24473f; stroke: #75baa8; stroke-width: 1.5; }
+.ssh-process-tile { fill: #20343e; stroke: #80a9b1; }
+.ssh-file { fill: #1b4c42; stroke: #77beae; stroke-width: 1.5; }
+.ssh-file-icon { fill: none; stroke: #a1dbcb; stroke-width: 1.3; }
+.ssh-meter-track { fill: #465e68; }
+.ssh-meter-fill { fill: var(--story-accent); }
+.ssh-art [data-status='done'] .ssh-meter-fill { fill: var(--ssh-working); }
+.ssh-art [data-status='stopped'] .ssh-meter-fill { fill: var(--ssh-loss); }
+.ssh-art [data-status='stopped'] .ssh-process-tile { fill: #3b2d36; stroke: #9d686a; }
+.ssh-art [data-status='stopped'] .ssh-secondary { fill: #ffd1c9; }
+.ssh-wire, .ssh-wire-base, .ssh-wire-hit, .ssh-attach, .ssh-shell-tether, .ssh-file-line { fill: none; }
+.ssh-wire, .ssh-attach, .ssh-shell-tether, .ssh-file-line { stroke: var(--ssh-link); stroke-width: 3; }
+.ssh-wire-hit { stroke: transparent; stroke-width: 18; }
+.ssh-wire-base { stroke: #516a76; stroke-width: 2; stroke-dasharray: .04 .03; }
+.ssh-lost .ssh-wire { stroke: var(--ssh-loss); }
+.ssh-lost .ssh-wire-base { visibility: hidden; }
+.ssh-break circle { fill: #472b31; stroke: var(--ssh-loss); }
+.ssh-break path { fill: none; stroke: #ffe1da; stroke-width: 1.7; stroke-linecap: round; }
+.ssh-attach { stroke: var(--ssh-working); }
+.ssh-detached { stroke-dasharray: .26 .48 .26; opacity: .65; }
+.ssh-shell-tether { stroke-dasharray: 4 3; }
+.ssh-shell-tether.ssh-stopped { stroke: var(--ssh-loss); }
+.ssh-file-line { stroke: var(--ssh-working); stroke-width: 1.8; }
+.ssh-offline :is(.ssh-tile, .ssh-laptop-frame, .ssh-screen) { opacity: .55; }
+.ssh-offline .ssh-secondary { fill: #f3b7ae; }
+.ssh-art :is(.story-hovered, [data-lesson-part][aria-pressed='true'], [data-lesson-part]:focus-visible) {
+  filter: drop-shadow(0 1px 3px #c5f0ff85);
+}
+
+@media (max-width: 690px) {
+  .ssh-lesson-stage { height: clamp(442px, 112vw, 530px); }
+  .ssh-lesson-stage .story-art { top: calc(50% - 52px); height: calc(100% - 112px); }
+}
