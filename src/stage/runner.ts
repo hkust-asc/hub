@@ -1,6 +1,45 @@
-import type { StageStepDef } from './types.ts'
+import type { StageContinuation, StageContinuationLink, StageStepDef } from './types.ts'
 
 export type StagePlaybackRate = 0.5 | 1 | 2
+
+export interface StageRailNavView {
+  readonly isFirstStep: boolean
+  readonly isFinalStep: boolean
+  readonly prevStepLabel: string | null
+  readonly nextStepLabel: string | null
+  readonly returnLink: StageContinuationLink | null
+  readonly primaryContinuation: StageContinuationLink | null
+  readonly secondaryContinuation: readonly StageContinuationLink[]
+  readonly upNextKicker: string
+}
+
+export function describeStageRailNav(options: {
+  steps: readonly StageStepDef[]
+  stepIndex: number
+  returnLink?: StageContinuationLink
+  continuation?: StageContinuation
+}): StageRailNavView {
+  const maxIdx = Math.max(0, options.steps.length - 1)
+  const clamped = Math.max(0, Math.min(maxIdx, options.stepIndex))
+  const isFirstStep = clamped === 0
+  const isFinalStep = clamped >= maxIdx
+  return {
+    isFirstStep,
+    isFinalStep,
+    prevStepLabel: isFirstStep ? null : options.steps[clamped - 1]!.label,
+    nextStepLabel: isFinalStep ? null : options.steps[clamped + 1]!.label,
+    returnLink: isFirstStep && options.returnLink ? options.returnLink : null,
+    primaryContinuation: isFinalStep && options.continuation ? options.continuation.primary : null,
+    secondaryContinuation: isFinalStep && options.continuation?.secondary ? options.continuation.secondary : [],
+    upNextKicker: options.continuation?.kicker ?? 'Up next',
+  }
+}
+
+export function describeStageCue(inspecting: boolean, hasPinnedPart: boolean): string {
+  if (!inspecting) return 'Click any block to inspect (I)'
+  if (hasPinnedPart) return 'Inspecting component · Click another block or press Esc to close'
+  return 'Inspect active · Click, hover, or Tab through blocks (Esc to exit)'
+}
 
 export interface StageRunnerState<VariantId extends string = string> {
   readonly stepIndex: number

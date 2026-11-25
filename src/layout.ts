@@ -1,8 +1,8 @@
-import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForEntry } from './catalog'
-import type { CategoryDef, CategoryId, EntryDef } from './catalog'
-import { renderGlyph } from './glyphs'
-import { evidence } from './model'
-import { createClusterScene, createScene } from './scene'
+import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForEntry } from './catalog.ts'
+import type { CategoryDef, CategoryId, EntryDef } from './catalog.ts'
+import { renderGlyph } from './glyphs.ts'
+import { evidence } from './model.ts'
+import { createClusterScene, createScene } from './scene.ts'
 
 export const icon = (name: string) => `<i data-lucide="${name}" aria-hidden="true"></i>`
 
@@ -235,7 +235,7 @@ export function createLayout(): string {
 
         <section class="workbench" id="workbench" aria-label="Architecture workspace" hidden>
           <div class="visual-column">
-            <div class="view-toolbar"><span class="view-label" id="view-label">${icon('network')} Connectivity schematic</span><div class="view-tools" id="view-tools"><button type="button" class="icon-button" id="explode-button" aria-pressed="false" aria-label="Explode node layers" title="Explode node layers">${icon('layers-2')}</button><button type="button" class="icon-button" id="download-button" aria-label="Download diagram as SVG" title="Download diagram as SVG">${icon('arrow-down-to-line')}</button><button type="button" class="icon-button" id="reset-button" aria-label="Reset node view" title="Reset node view">${icon('rotate-ccw')}</button></div></div>
+            <div class="view-toolbar"><span class="view-label" id="view-label">${icon('network')} Connectivity schematic</span><div class="view-toolbar-right"><span class="view-click-cue" id="view-click-cue"><span class="view-cue-dot" aria-hidden="true"></span><span id="view-click-cue-text">Click any block to inspect (I)</span></span><div class="view-tools" id="view-tools"><button type="button" class="icon-button" id="explode-button" aria-pressed="false" aria-label="Explode node layers" title="Explode node layers">${icon('layers-2')}</button><button type="button" class="icon-button" id="download-button" aria-label="Download diagram as SVG" title="Download diagram as SVG">${icon('arrow-down-to-line')}</button><button type="button" class="icon-button" id="reset-button" aria-label="Reset node view" title="Reset node view">${icon('rotate-ccw')}</button></div></div></div>
             <div id="cluster-view"><div class="diagram-stage cluster-stage" id="cluster-stage">${createClusterScene()}</div></div>
             <div id="node-view" hidden><div class="diagram-stage" id="diagram-stage">${createScene('workbench-node')}</div><div class="placement-strip"><span>${icon('git-compare-arrows')}CPU / memory placement</span><div class="placement-control" role="group" aria-label="CPU and memory placement"><button type="button" id="local-button" aria-pressed="true">Local</button><button type="button" id="remote-button" aria-pressed="false">Cross-socket</button></div></div></div>
           </div>

@@ -1,4 +1,5 @@
 import type { Game } from './engine/game.ts'
+import type { Level } from './engine/levels/index.ts'
 import { getEntry } from '../catalog.ts'
 import { tokenize, xray } from './engine/shell.ts'
 import { conceptForAward } from '../platform/codex.ts'
@@ -6,6 +7,60 @@ import { missionLessons, practiceGroups, weeks } from '../platform/curriculum.ts
 import { entryLink, escapeHtml as esc, link } from '../platform/links.ts'
 import { stateView, stateViews } from './state-view.ts'
 import type { Run, StateView } from './state-view.ts'
+
+const missionStarters: Readonly<Record<number, readonly string[]>> = {
+  1: ['ls', 'tldr ls'],
+  2: ['ls -l ~/downloads', 'tldr chmod'],
+  3: ['./sensor_dump', 'tldr grep'],
+  4: ['echo "$PATH"', 'tldr which'],
+  5: ['lscpu', 'ps aux'],
+  6: ['pwd', 'ls'],
+}
+
+export function starterCommandsForMission(id: number): readonly string[] {
+  return missionStarters[id] ?? ['ls', 'pwd']
+}
+
+export interface MissionNavState {
+  readonly prev: { readonly id: number; readonly title: string; readonly route: string } | null
+  readonly next: {
+    readonly id: number
+    readonly title: string
+    readonly route: string
+    readonly unlocked: boolean
+  } | null
+  readonly weekBrief: { readonly id: string; readonly title: string; readonly route: string } | null
+  readonly primaryLesson: { readonly id: string; readonly title: string; readonly route: string } | null
+}
+
+export function describeMissionNav(
+  allLevels: readonly Pick<Level, 'id' | 'title'>[],
+  currentId: number,
+  isUnlocked: (id: number) => boolean,
+): MissionNavState {
+  const idx = allLevels.findIndex(item => item.id === currentId)
+  const prevLevel = idx > 0 ? allLevels[idx - 1]! : null
+  const nextLevel = idx >= 0 && idx < allLevels.length - 1 ? allLevels[idx + 1]! : null
+  const week = weeks.find(w => w.missions.includes(currentId)) ?? weeks[0] ?? null
+  const firstLessonId = missionLessons[currentId]?.[0]
+  const firstLessonEntry = firstLessonId ? getEntry(firstLessonId) : undefined
+
+  return {
+    prev: prevLevel ? { id: prevLevel.id, title: prevLevel.title, route: `#practice/${prevLevel.id}` } : null,
+    next: nextLevel
+      ? {
+        id: nextLevel.id,
+        title: nextLevel.title,
+        route: `#practice/${nextLevel.id}`,
+        unlocked: isUnlocked(nextLevel.id),
+      }
+      : null,
+    weekBrief: week ? { id: week.id, title: week.title, route: `#weeks/${week.id}` } : null,
+    primaryLesson: firstLessonEntry
+      ? { id: firstLessonEntry.id, title: firstLessonEntry.title, route: `#lesson/${firstLessonEntry.id}` }
+      : null,
+  }
+}
 
 function panel(html: string) {
   const node = document.createElement('section')
@@ -28,7 +83,7 @@ function retentionNote(game: Game): string {
 
 export class PracticeDesk {
   readonly game: Game
-  private session?: { mission: number; node: HTMLElement }
+  private session?: { mission: number; node: HTMLElement; refresh: () => void }
   private onToggleUnlockAll?: (enabled: boolean) => void
   constructor(game: Game) { this.game = game }
 
@@ -98,7 +153,14 @@ export class PracticeDesk {
     const mission = game.levels.find(m => m.id === id)!
     if (!game.isUnlocked(id)) {
       const next = game.levels.find(m => !game.isComplete(m.id) && game.isUnlocked(m.id))!
-      const locked = panel(`<article class="mode-panel step-panel" data-tone="slate"><div class="mode-card-top"><span class="mode-meta">Mission ${id}</span><span class="status-pill is-locked">Locked</span></div><h2>${esc(mission.title)}</h2>
+      const nav = describeMissionNav(game.levels, id, mid => game.isUnlocked(mid))
+      const locked = panel(`<nav class="mission-nav" aria-label="Mission navigation">
+          <a class="mode-link" data-route="#practice" href="#practice">← All missions</a>
+          <div class="mission-step-links">
+            ${nav.prev ? `<a class="mode-link" data-mission-prev data-route="${esc(nav.prev.route)}" href="${esc(nav.prev.route)}">← Prev mission</a>` : ''}
+          </div>
+        </nav>
+        <article class="mode-panel step-panel" data-tone="slate"><div class="mode-card-top"><span class="mode-meta">Mission ${id}</span><span class="status-pill is-locked">Locked</span></div><h2>${esc(mission.title)}</h2>
         <p>${esc(mission.objective)}</p><p>Finish the earlier missions first, or unlock all missions if you want to jump straight in. Atlas cards are always available.</p>
         <div class="mode-links">${link(`#practice/${next.id}`, `Continue at mission ${next.id}`)}<button type="button" class="mode-action is-accent" data-unlock-now>Unlock all missions</button>${mission.cards.map(k => entryLink(conceptForAward(k))).join('')}</div></article>`)
       locked.querySelector<HTMLButtonElement>('[data-unlock-now]')!.onclick = () => {
@@ -108,25 +170,58 @@ export class PracticeDesk {
       }
       return locked
     }
-    if (this.session?.mission === id) return this.session.node
+    if (this.session?.mission === id) {
+      this.session.refresh()
+      return this.session.node
+    }
     game.select(id)
-    const node = this.runner()
-    this.session = { mission: id, node }
-    return node
+    const built = this.runner()
+    this.session = { mission: id, ...built }
+    return built.node
   }
 
-  private runner(): HTMLElement {
+  private runner(): { node: HTMLElement; refresh: () => void } {
     const game = this.game, m = game.level
-    const node = panel(`<article class="mode-panel mission-brief" data-tone="green"><div class="mode-card-top"><span class="step-kicker">Mission ${m.id} / ${game.levels.length}</span><span class="mode-meta">Browser simulation</span></div>
-      <h2>${esc(m.title)}</h2><p>${esc(m.objective)}</p><div class="mode-links">
-      ${missionLessons[m.id].map(id => link(`#lesson/${id}`, `Learn · ${getEntry(id)!.title}`)).join('')}
-      ${m.cards.map(k => entryLink(conceptForAward(k))).join('')}${weeks.filter(w => w.missions.includes(m.id)).map(w => link(`#weeks/${w.id}`, w.title)).join('')}</div>
-      <div class="mission-hints"><ol></ol><button type="button" class="mode-action" data-hint>Reveal a hint</button></div>
-      <p data-outcome role="status"></p><div data-next></div></article>
-      <div class="practice-columns"><section class="mode-panel step-panel" data-tone="blue"><h2>Simulated terminal</h2><p class="mode-note">No host commands. Use demo values only. <span data-retention>${retentionNote(game)}</span></p>
+    const lessons = missionLessons[m.id] ?? []
+    const [primaryLessonId, ...otherLessonIds] = lessons
+    const primaryLesson = primaryLessonId ? getEntry(primaryLessonId) : undefined
+    const starters = starterCommandsForMission(m.id)
+    const node = panel(`<nav class="mission-nav" aria-label="Mission navigation">
+        <a class="mode-link mission-all-link" data-route="#practice" href="#practice">← All missions</a>
+        <div class="mission-step-links" data-mission-step-links></div>
+      </nav>
+      <article class="mode-panel mission-brief" data-tone="green">
+        <div class="mode-card-top">
+          <span class="step-kicker">Mission ${m.id} / ${game.levels.length}</span>
+          <span class="status-pill" data-mission-status>Active mission</span>
+        </div>
+        <h2>${esc(m.title)}</h2>
+        <p>${esc(m.objective)}</p>
+        <div class="mission-callout-bar">
+          <button type="button" class="mode-action is-accent" data-hint>Reveal hint (0/${m.hints.length})</button>
+          ${primaryLesson ? `<a class="mode-link is-walkthrough-callout" data-walkthrough-link data-route="#lesson/${esc(primaryLesson.id)}" href="#lesson/${esc(primaryLesson.id)}">See visual walkthrough: ${esc(primaryLesson.title)} →</a>` : ''}
+          ${otherLessonIds.map(lid => link(`#lesson/${lid}`, `Learn · ${getEntry(lid)!.title}`)).join('')}
+          ${weeks.filter(w => w.missions.includes(m.id)).map(w => link(`#weeks/${w.id}`, `${w.title} brief`)).join('')}
+        </div>
+        <div class="mode-links mission-ref-links" aria-label="Reference cards">
+          <span class="mission-ref-label">Atlas cards:</span>
+          ${m.cards.map(k => entryLink(conceptForAward(k))).join('')}
+        </div>
+        <div class="mission-hints"><ol></ol></div>
+        <div class="mission-complete-banner" data-complete-banner hidden>
+          <p data-outcome role="status"></p>
+          <div class="mission-complete-actions" data-next></div>
+        </div>
+      </article>
+      <div class="practice-columns"><section class="mode-panel step-panel" data-tone="blue"><div class="mode-card-top"><h2>Simulated terminal</h2><span class="mode-meta">Type below &amp; press Enter</span></div><p class="mode-note">No host commands. Use demo values only. <span data-retention>${retentionNote(game)}</span></p>
       <div class="terminal-log" role="log" aria-label="Terminal output" tabindex="0"></div>
-      <form class="terminal-form" autocomplete="off"><label><span data-prompt></span><input name="command" type="text" aria-label="Simulated command" autocapitalize="off" spellcheck="false"></label>
-        <button class="mode-action is-accent" type="submit">Run</button></form><p class="mode-note">↑ / ↓ history · Tab complete · Ctrl+L clear</p>
+      <div class="terminal-starters" aria-label="Starter commands">
+        <span class="starter-label">Start here:</span>
+        ${starters.map(cmd => `<button type="button" class="starter-cmd-btn" data-starter-cmd="${esc(cmd)}"><code>${esc(cmd)}</code></button>`).join('')}
+        ${m.proposals ? `<button type="button" class="starter-cmd-btn is-audit-jump" data-jump-audit>Review proposals below ↓</button>` : ''}
+      </div>
+      <form class="terminal-form" autocomplete="off"><label class="terminal-prompt-box"><span class="terminal-prompt-line"><span class="prompt-caret" aria-hidden="true">▸</span><span data-prompt></span></span><input name="command" type="text" aria-label="Simulated command" placeholder="Type command here (e.g. ${esc(starters[0] ?? 'ls')})…" autocapitalize="off" spellcheck="false"></label>
+        <button class="mode-action is-accent" type="submit">Run ↵</button></form><p class="mode-note">↑ / ↓ history · Tab complete · Ctrl+L clear</p>
       <h3>Command X-ray</h3><div data-chips class="command-chips"></div>
       <button type="button" class="mode-action" data-restart>Restart this simulation</button></section>
       <section class="mode-panel step-panel" data-tone="green"><h2>State X-ray</h2><label class="state-picker">Inspect <select aria-label="State view">${Object.entries(stateViews).map(([k, text]) => `<option value="${k}">${text}</option>`).join('')}</select></label>
@@ -138,7 +233,7 @@ export class PracticeDesk {
     const picker = el<HTMLSelectElement>('select')
     picker.value = m.visualizer
     const drawState = () => { el('.sim-state').innerHTML = stateView(picker.value as StateView, game.shell, last) }
-    const drawChips = (text: string) => { el('[data-chips]').innerHTML = chips(text, game.shell.cwd) || '<small>Type a command to see its parts.</small>' }
+    const drawChips = (text: string) => { el('[data-chips]').innerHTML = chips(text, game.shell.cwd) || '<small>Type a command above (or click a starter) to inspect its parts.</small>' }
     const append = (text: string, tone = '') => {
       if (!text) return
       const pre = document.createElement('pre')
@@ -149,11 +244,52 @@ export class PracticeDesk {
       if (log.childElementCount > 240) log.firstElementChild!.remove()
       log.scrollTop = log.scrollHeight
     }
+    const syncMissionNav = () => {
+      const done = game.isComplete(m.id)
+      const statusPill = el('[data-mission-status]')
+      statusPill.textContent = done ? 'Complete ✓' : 'Active mission'
+      statusPill.classList.toggle('is-done', done)
+
+      const nav = describeMissionNav(game.levels, m.id, mid => game.isUnlocked(mid))
+      const stepLinks: string[] = []
+      if (nav.prev) {
+        stepLinks.push(`<a class="mode-link" data-mission-prev data-route="${esc(nav.prev.route)}" href="${esc(nav.prev.route)}" title="Mission ${nav.prev.id}: ${esc(nav.prev.title)}">← Prev mission</a>`)
+      }
+      if (nav.next) {
+        if (nav.next.unlocked) {
+          stepLinks.push(`<a class="mode-link is-next-mission" data-mission-next data-route="${esc(nav.next.route)}" href="${esc(nav.next.route)}" title="Mission ${nav.next.id}: ${esc(nav.next.title)}">Next mission →</a>`)
+        } else {
+          stepLinks.push(`<span class="mission-nav-locked" data-mission-next-locked title="Complete Mission ${m.id} to unlock Mission ${nav.next.id}">Next mission →</span>`)
+        }
+      } else if (nav.weekBrief) {
+        stepLinks.push(`<a class="mode-link" data-mission-next data-route="${esc(nav.weekBrief.route)}" href="${esc(nav.weekBrief.route)}">${esc(nav.weekBrief.title)} →</a>`)
+      }
+      el('[data-mission-step-links]').innerHTML = stepLinks.join('')
+    }
     const updateOutcome = () => {
       const done = game.isComplete(m.id)
-      el('[data-outcome]').textContent = done ? (m.reward?.title ?? 'Mission complete · Atlas cards marked practiced.') : ''
-      el('[data-next]').innerHTML = done ? (game.levels.some(level => level.id === m.id + 1)
-        ? link(`#practice/${m.id + 1}`, 'Next mission →') : link('#practice', 'All missions')) : ''
+      syncMissionNav()
+      const banner = el('[data-complete-banner]')
+      banner.hidden = !done
+      el('[data-outcome]').textContent = done ? (m.reward?.title ?? 'Mission complete ✓ · Atlas cards marked practiced.') : ''
+      if (!done) {
+        el('[data-next]').innerHTML = ''
+        return
+      }
+      const nav = describeMissionNav(game.levels, m.id, mid => game.isUnlocked(mid))
+      const actions: string[] = []
+      if (nav.next) {
+        actions.push(`<a class="mode-link is-complete-cta" data-route="${esc(nav.next.route)}" href="${esc(nav.next.route)}">Next mission: ${esc(nav.next.title)} →</a>`)
+      } else {
+        actions.push(`<a class="mode-link is-complete-cta" data-route="#practice" href="#practice">All missions →</a>`)
+      }
+      if (nav.weekBrief) {
+        actions.push(link(nav.weekBrief.route, `${nav.weekBrief.title} brief`))
+      }
+      if (nav.primaryLesson) {
+        actions.push(link(nav.primaryLesson.route, `Learn · ${nav.primaryLesson.title}`))
+      }
+      el('[data-next]').innerHTML = actions.join('')
     }
     const drawAudit = () => {
       const p = game.proposal
@@ -173,13 +309,36 @@ export class PracticeDesk {
       }
     }
     picker.onchange = drawState
-    el<HTMLButtonElement>('[data-hint]').onclick = () => {
+    const hintBtn = el<HTMLButtonElement>('[data-hint]')
+    hintBtn.onclick = () => {
       const item = document.createElement('li')
       item.textContent = m.hints[hint++]
       el('.mission-hints ol').append(item)
-      el<HTMLButtonElement>('[data-hint]').disabled = hint >= m.hints.length
+      const exhausted = hint >= m.hints.length
+      hintBtn.disabled = exhausted
+      hintBtn.textContent = exhausted
+        ? `All hints shown (${hint}/${m.hints.length})`
+        : `Next hint (${hint}/${m.hints.length})`
       item.tabIndex = -1
       item.focus()
+    }
+    for (const starterBtn of node.querySelectorAll<HTMLButtonElement>('[data-starter-cmd]')) {
+      starterBtn.onclick = () => {
+        const cmd = starterBtn.dataset.starterCmd ?? ''
+        input.value = cmd
+        drawChips(cmd)
+        tabOffered = false
+        input.focus()
+        input.setSelectionRange(cmd.length, cmd.length)
+      }
+    }
+    const jumpAuditBtn = node.querySelector<HTMLButtonElement>('[data-jump-audit]')
+    if (jumpAuditBtn) {
+      jumpAuditBtn.onclick = () => {
+        const target = node.querySelector<HTMLElement>('[data-verdict-choice], [data-audit]')
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        target?.focus({ preventScroll: true })
+      }
     }
     el<HTMLButtonElement>('[data-restart]').onclick = () => {
       if (!window.confirm('Start this mission with a fresh virtual filesystem? Completed missions stay complete.')) return
@@ -238,8 +397,8 @@ export class PracticeDesk {
       }
     }
     el('[data-prompt]').textContent = game.shell.prompt
-    append('Simulator ready. Try tldr ls or a command followed by --help.', 'feedback')
+    append('Simulator ready. Click a starter command below or type directly (try tldr ls or --help).', 'feedback')
     drawChips(''); drawState(); updateOutcome(); drawAudit()
-    return node
+    return { node, refresh: updateOutcome }
   }
 }

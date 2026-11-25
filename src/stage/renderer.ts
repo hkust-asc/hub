@@ -1,4 +1,4 @@
-import { planCameraViewBox, resolveEntityWorldBoxes, resolveWireRoute } from './layout.ts'
+import { computeSpotlightGeometry, planCameraViewBox, resolveEntityWorldBoxes, resolveWireRoute } from './layout.ts'
 import type { ViewBoxRect } from './layout.ts'
 import { measurePillWidth } from './measure.ts'
 import type {
@@ -109,7 +109,7 @@ export function createSchematicStageScene<
 
   function renderEntityMarkup(entity: StageEntitySpec<EntityId>): string {
     const inspectAttrs = entity.part
-      ? `data-stage-part="entity:${entity.id}" role="button" tabindex="-1" aria-label="${escapeHtml(entity.part.name)}" aria-pressed="false"`
+      ? `data-stage-part="entity:${entity.id}" data-lesson-part="${entity.id}" role="button" tabindex="-1" aria-label="${escapeHtml(entity.part.name)}" aria-pressed="false"`
       : `aria-hidden="true"`
     const baseAttrs = `class="st-entity st-${entity.kind}" data-entity="${entity.id}" data-tone="slate" ${inspectAttrs}`
 
@@ -224,7 +224,7 @@ export function createSchematicStageScene<
     <g class="layer-links">
       ${spec.wires.map(w => {
         const inspectAttrs = w.part
-          ? `data-stage-part="wire:${w.id}" role="button" tabindex="-1" aria-label="${escapeHtml(w.part.name)}" aria-pressed="false"`
+          ? `data-stage-part="wire:${w.id}" data-lesson-part="${w.id}" role="button" tabindex="-1" aria-label="${escapeHtml(w.part.name)}" aria-pressed="false"`
           : `aria-hidden="true"`
         return `<g class="st-wire-group" data-wire-group="${w.id}" ${inspectAttrs} hidden>
           ${w.part ? `<path class="st-wire-hit"/>` : ''}
@@ -235,6 +235,9 @@ export function createSchematicStageScene<
           </g>
         </g>`
       }).join('')}
+    </g>
+    <g class="layer-spotlight" aria-hidden="true">
+      ${spec.entities.map(e => `<g class="st-spotlight" data-spotlight="${e.id}" data-tone="blue" hidden><rect class="st-spotlight-halo"/><path class="st-spotlight-corners"/></g>`).join('')}
     </g>
     <g class="layer-packets" aria-hidden="true">
       ${packetIds.map(pid => `<g class="st-packet" data-packet="${pid}" data-tone="green" hidden><rect height="19"/><text y="3.5"></text></g>`).join('')}
@@ -331,6 +334,16 @@ export function createSchematicStageScene<
       }]
     }),
   )
+  const spotlightEls = new Map(
+    spec.entities.map(entity => {
+      const group = art.querySelector<SVGGElement>(`[data-spotlight="${entity.id}"]`)!
+      return [entity.id, {
+        group,
+        halo: group.querySelector<SVGRectElement>('.st-spotlight-halo')!,
+        corners: group.querySelector<SVGPathElement>('.st-spotlight-corners')!,
+      }]
+    }),
+  )
 
   const animState = new Map<EntityId, AnimatedEntityTransform>()
   for (const entity of spec.entities) {
@@ -341,6 +354,7 @@ export function createSchematicStageScene<
   let mode: LayoutMode = 'wide'
   let layoutInitialized = false
   let currentViewBox: ViewBoxRect = { x: 0, y: 0, w: spec.wideSize.w, h: spec.wideSize.h }
+  let lastSpotlightStepKey = ''
 
   function applyBoxGeometry(entity: StageEntitySpec<EntityId>, box: StageBox, isCompact: boolean): void {
     const els = entityEls.get(entity.id)!
@@ -570,6 +584,35 @@ export function createSchematicStageScene<
     }
     const worldBoxes = resolveEntityWorldBoxes(spec.entities, mode, overrides)
 
+    const emphasizedIds = new Set<EntityId>()
+    const involvedIds = new Set<EntityId>()
+    for (const entity of spec.entities) {
+      const eState = frame.entities[entity.id]
+      if (!eState?.hidden && eState?.emphasis) {
+        emphasizedIds.add(entity.id)
+        involvedIds.add(entity.id)
+        if (entity.parent) involvedIds.add(entity.parent)
+      }
+    }
+    for (const pin of frame.pins ?? []) {
+      involvedIds.add(pin.target)
+    }
+    for (const wire of spec.wires) {
+      const wState = frame.wires[wire.id]
+      if (wState?.visible && wState.active !== false && wire.kind !== 'tree') {
+        const fromId = (wState.fromOverride?.id as EntityId | undefined) ?? wire.from.id
+        const toId = (wState.toOverride?.id as EntityId | undefined) ?? wire.to.id
+        involvedIds.add(fromId)
+        involvedIds.add(toId)
+      }
+    }
+    const hasSpotlight = emphasizedIds.size > 0
+    art.dataset.spotlight = String(hasSpotlight)
+    art.dataset.reducedMotion = String(options.reducedMotion)
+    const stepKey = `${options.stepIndex}:${options.variant}`
+    const stepChanged = stepKey !== lastSpotlightStepKey
+    lastSpotlightStepKey = stepKey
+
     for (const tray of trays) {
       const slot = trayEls.get(tray.id)!
       const visible = frame.trays?.[tray.id] ?? true
@@ -635,6 +678,13 @@ export function createSchematicStageScene<
       if (els.group.dataset.tone !== tone) els.group.dataset.tone = tone
       els.group.dataset.emphasis = String(Boolean(state?.emphasis))
       els.group.dataset.dashed = String(Boolean(state?.dashed))
+      els.group.dataset.spotlightRole = !hasSpotlight
+        ? 'none'
+        : emphasizedIds.has(entity.id)
+          ? 'focus'
+          : involvedIds.has(entity.id)
+            ? 'context'
+            : 'muted'
 
       if (els.kickerText && (entity.kind === 'plinth' || entity.kind === 'card')) {
         const kicker = state?.kicker ?? (isCompact ? (entity.compactKicker ?? entity.kicker ?? '') : (entity.kicker ?? ''))
@@ -836,6 +886,62 @@ export function createSchematicStageScene<
       'viewBox',
       `${Math.round(currentViewBox.x * 10) / 10} ${Math.round(currentViewBox.y * 10) / 10} ${Math.round(currentViewBox.w * 10) / 10} ${Math.round(currentViewBox.h * 10) / 10}`,
     )
+
+    for (const entity of spec.entities) {
+      const spSlot = spotlightEls.get(entity.id)!
+      const eState = frame.entities[entity.id]
+      const showSp = Boolean(!eState?.hidden && eState?.emphasis)
+      spSlot.group.toggleAttribute('hidden', !showSp)
+      if (!showSp) {
+        spSlot.group.classList.remove('is-pulsing')
+        continue
+      }
+      const anim = animState.get(entity.id)!
+      const box = worldBoxes[entity.id]
+      const tone = eState?.tone && eState.tone !== 'slate' ? eState.tone : 'blue'
+      if (spSlot.group.dataset.tone !== tone) spSlot.group.dataset.tone = tone
+      const geom = computeSpotlightGeometry(
+        { x: anim.x, y: anim.y + anim.lift, w: box.w, h: box.h },
+        currentViewBox,
+        4,
+        1.5,
+      )
+      if (!geom) {
+        spSlot.group.setAttribute('hidden', '')
+        spSlot.group.classList.remove('is-pulsing')
+        continue
+      }
+      spSlot.halo.setAttribute('x', String(geom.halo.x))
+      spSlot.halo.setAttribute('y', String(geom.halo.y))
+      spSlot.halo.setAttribute('width', String(geom.halo.w))
+      spSlot.halo.setAttribute('height', String(geom.halo.h))
+      spSlot.corners.setAttribute('d', geom.cornersPath)
+      if (options.reducedMotion) {
+        spSlot.group.classList.remove('is-pulsing')
+      } else if (stepChanged) {
+        spSlot.group.classList.remove('is-pulsing')
+        void spSlot.group.getBoundingClientRect()
+        spSlot.group.classList.add('is-pulsing')
+      }
+    }
+
+    for (const [pinId, slot] of pinEls) {
+      const pin = activePins.find(item => item.id === pinId)
+      if (!pin) continue
+      const targetBox = worldBoxes[pin.target]
+      if (!targetBox) continue
+      const w = Number(slot.rect.getAttribute('width') || 48)
+      const align = pin.align ?? 'top-right'
+      const rawPx = align === 'top-right'
+        ? targetBox.x + targetBox.w - w + 6
+        : targetBox.x + targetBox.w / 2 - w / 2
+      const rawPy = align === 'bottom-center'
+        ? targetBox.y + targetBox.h + 10
+        : targetBox.y - 8
+      const clampedPx = Math.max(currentViewBox.x + 2, Math.min(currentViewBox.x + currentViewBox.w - w - 2, rawPx))
+      const clampedPy = Math.max(currentViewBox.y + 11, Math.min(currentViewBox.y + currentViewBox.h - 11, rawPy))
+      slot.group.setAttribute('transform', `translate(${Math.round(clampedPx * 10) / 10} ${Math.round(clampedPy * 10) / 10})`)
+    }
 
     return {
       narrative: {

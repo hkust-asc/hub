@@ -1,6 +1,6 @@
-import { createIsoProjector } from './iso'
-import type { IsoPaletteName, Point2, Point3 } from './iso'
-import type { ClusterTopicId } from './model'
+import { createIsoProjector } from './iso.ts'
+import type { IsoPaletteName, Point2, Point3 } from './iso.ts'
+import type { ClusterTopicId } from './model.ts'
 
 export const nodeIso = createIsoProjector({ originX: 410, originY: 108, scale: 0.88, roundTo: 100 })
 const { project, points, polyline: line } = nodeIso
