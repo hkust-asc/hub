@@ -1,4 +1,4 @@
-# HPC4 Anatomy: Scene-Based Architecture Explorer
+# HPC4 Hub: Scene-Based Architecture Explorer
 
 A Vite / TypeScript learning companion for HPC and ASC workshops. Its four modes share one catalog: explore a mechanism, rehearse it in a simulated shell, apply it in a field quest, and return to a permanent reference. The app never connects to a training server.
 

@@ -158,7 +158,7 @@ export function createLayout(): string {
   return `
     <a class="skip-link" href="#workspace">Skip to workspace</a>
     <header class="topbar">
-      <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#atlas" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>anatomy</strong></span></a></div>
+      <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#atlas" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>hub</strong></span></a></div>
       <nav class="top-modes" aria-label="Learning modes">${modeLinks('mode-tab')}</nav>
       <div class="top-tools"><button class="search-trigger" id="open-switcher" type="button" title="Search all modes (Ctrl+K)" aria-label="Search all modes" aria-keyshortcuts="Control+K Meta+K">${icon('search')}<span class="search-trigger-label">Search</span><kbd class="search-kbd" id="search-kbd">Ctrl K</kbd></button>
       <button class="evidence-button" id="open-evidence" type="button" aria-label="Illustrative topology" title="Sources and illustrative assumptions"><span class="evidence-dot"></span><span class="evidence-label">Illustrative topology</span>${icon('info')}</button></div>
@@ -166,7 +166,7 @@ export function createLayout(): string {
     <div class="app-layout">
       <button class="nav-backdrop" id="nav-backdrop" type="button" aria-label="Close navigation" hidden></button>
       <aside class="sidebar" id="sidebar" aria-label="Navigation">
-        <div class="drawer-heading"><span>HPC4 anatomy</span><button class="icon-button" type="button" id="close-menu" aria-label="Close navigation" title="Close navigation">${icon('x')}</button></div>
+        <div class="drawer-heading"><span>HPC4 hub</span><button class="icon-button" type="button" id="close-menu" aria-label="Close navigation" title="Close navigation">${icon('x')}</button></div>
         <nav class="primary-nav" aria-label="Primary navigation">
           <div class="nav-group drawer-modes"><h2>Learning modes</h2>${modeLinks('nav-item')}</div>
           <div class="nav-group">

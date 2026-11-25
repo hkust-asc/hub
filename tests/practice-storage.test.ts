@@ -65,3 +65,28 @@ test("damaged saves recover usable fields, retain repeated history, and can be s
   game.run("cd /");
   assert.deepEqual(new Game(storage).store.state.history, [...Array(99).fill("ls"), "cd /"]);
 });
+
+test("legacy hpc4-anatomy practice saves load under the hub key and stay cleared after reset", () => {
+  const withRemove = {
+    data: new Map<string, string>([
+      ["hpc4-anatomy.practice.act1", JSON.stringify({ completed: [1], cards: ["paths"], history: ["ls -a"] })],
+    ]),
+    getItem(key: string): string | null { return this.data.get(key) ?? null; },
+    setItem(key: string, value: string): void { this.data.set(key, value); },
+    removeItem(key: string): void { this.data.delete(key); },
+  };
+  const migrated = new Game(withRemove);
+  assert.equal(migrated.level.id, 2);
+  assert.deepEqual(migrated.store.state, { completed: [1], cards: ["paths"], history: ["ls -a"] });
+
+  migrated.reset();
+  assert.deepEqual(new Game(withRemove).store.state, { completed: [], cards: [], history: [] });
+  assert.equal(withRemove.getItem("hpc4-anatomy.practice.act1"), null);
+
+  const withoutRemove = new MemoryStorage();
+  withoutRemove.setItem("hpc4-anatomy.practice.act1", JSON.stringify({ completed: [1], cards: ["paths"], history: ["pwd"] }));
+  const fallback = new Game(withoutRemove);
+  assert.equal(fallback.level.id, 2);
+  fallback.reset();
+  assert.deepEqual(new Game(withoutRemove).store.state, { completed: [], cards: [], history: [] });
+});

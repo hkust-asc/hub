@@ -1,4 +1,5 @@
-export const storageKey = "hpc4-anatomy.practice.act1";
+export const storageKey = "hpc4-hub.practice.act1";
+const legacyStorageKey = "hpc4-anatomy.practice.act1";
 export interface StorageAdapter {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -44,7 +45,7 @@ export function progressStore(storage?: StorageAdapter): ProgressStore {
   let persistence: Persistence = storage ? "available" : "memory";
   let saved: string | null = null;
   try {
-    saved = storage?.getItem(storageKey) ?? null;
+    saved = storage?.getItem(storageKey) ?? storage?.getItem(legacyStorageKey) ?? null;
   } catch {
     persistence = "unavailable";
   }
@@ -82,6 +83,7 @@ export function progressStore(storage?: StorageAdapter): ProgressStore {
       try {
         if (storage?.removeItem) {
           storage.removeItem(storageKey);
+          storage.removeItem(legacyStorageKey);
           persistence = "available";
           return;
         }

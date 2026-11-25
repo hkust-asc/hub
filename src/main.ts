@@ -452,7 +452,7 @@ function render(): void {
   const refEl = element('scene-reference')
   refEl.hidden = !sceneRef
   refEl.textContent = sceneRef
-  document.title = `HPC4 Anatomy / ${title}`
+  document.title = `HPC4 Hub / ${title}`
 
   const activeDirectNav = currentRoute.view === 'atlas'
     ? 'atlas'

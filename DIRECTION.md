@@ -1,4 +1,4 @@
-# HPC4 Anatomy: Agreed Direction
+# HPC4 Hub: Agreed Direction
 
 Agreed on 2026-10-19, building on the prototype and discussion of 2026-10-15 to 2026-10-17.
 

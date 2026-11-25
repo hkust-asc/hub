@@ -1,4 +1,4 @@
-# HPC4 Anatomy
+# HPC4 Hub
 
 An educational explorer of HPC and ASC workshop concepts, with HPC4 as a concrete example. Shared subjects connect free exploration with guided explanations.
 
