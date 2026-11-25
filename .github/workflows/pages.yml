@@ -1,0 +1,102 @@
+name: CI and Deploy GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests and production build
+        run: npm run check
+
+      - name: Verify explicit state machines and link graph
+        run: |
+          if [ -f scripts/check-state-machines.ts ]; then
+            node scripts/check-state-machines.ts
+          fi
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+
+  check_pages:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      enabled: ${{ steps.status.outputs.enabled }}
+    steps:
+      - name: Check GitHub Pages configuration
+        id: status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          http_code="$(curl -sS -o "$response_file" -w '%{http_code}' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")"
+          case "$http_code" in
+            200)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=GitHub Pages not enabled yet::Once the repository is public, set Settings -> Pages -> Build and deployment -> Source to 'GitHub Actions' and re-run this workflow."
+              ;;
+            *)
+              echo "::error title=GitHub Pages status check failed::Unexpected HTTP ${http_code} from GitHub Pages API."
+              cat "$response_file" >&2
+              exit 1
+              ;;
+          esac
+
+  deploy:
+    if: needs.check_pages.outputs.enabled == 'true'
+    needs: [build, check_pages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
