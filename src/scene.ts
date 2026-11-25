@@ -1,45 +1,30 @@
-type Point3 = [number, number, number]
-type Point2 = [number, number]
-type Palette = [string, string, string]
+import { createIsoProjector } from './iso'
+import type { IsoPaletteName, Point2, Point3 } from './iso'
 import type { ClusterTopicId } from './model'
 
-const palettes: Record<string, Palette> = {
-  board: ['#e4ebe8', '#c6d4cd', '#b1c3ba'],
-  frame: ['#e2e5e8', '#c6ccd2', '#aeb7c0'],
-  cpu: ['#e3b47d', '#c78d51', '#a87540'],
-  cpuTop: ['#f4dbc0', '#d7aa76', '#b58c5e'],
-  memory: ['#70a596', '#427d6d', '#346455'],
-  chip: ['#40575a', '#304345', '#26383a'],
-  gpu: ['#91a8db', '#6681b8', '#4f6798'],
-  gpuTop: ['#d9e3f6', '#aec0e5', '#8b9ec5'],
-  network: ['#b5beca', '#8d9baa', '#718394'],
-  slot: ['#a3b0b0', '#7c9190', '#637b79'],
+export const nodeIso = createIsoProjector({ originX: 410, originY: 108, scale: 0.88, roundTo: 100 })
+const { project, points, polyline: line } = nodeIso
+
+function block(
+  horizontal: number,
+  depth: number,
+  height: number,
+  width: number,
+  length: number,
+  thickness: number,
+  palette: IsoPaletteName,
+): string {
+  return nodeIso.box(horizontal, depth, height, width, length, thickness, palette, { className: 'solid', strokeWidth: 1 })
 }
 
-function project([horizontal, depth, height]: Point3): Point2 {
-  return [410 + (horizontal - depth) * 0.88, 108 + (horizontal + depth) * 0.44 - height]
-}
-
-function points(vertices: Point3[]): string {
-  return vertices.map(vertex => project(vertex).join(',')).join(' ')
-}
-
-function block(horizontal: number, depth: number, height: number, width: number, length: number, thickness: number, palette: string): string {
-  const [top, front, side] = palettes[palette]!
-  const farLeft: Point3 = [horizontal, depth, height + thickness]
-  const farRight: Point3 = [horizontal + width, depth, height + thickness]
-  const nearRight: Point3 = [horizontal + width, depth + length, height + thickness]
-  const nearLeft: Point3 = [horizontal, depth + length, height + thickness]
-  return `<g class="solid" stroke-width="1" stroke-linejoin="round">
-    <polygon points="${points([nearLeft, nearRight, [horizontal + width, depth + length, height], [horizontal, depth + length, height]])}" fill="${front}" />
-    <polygon points="${points([farRight, nearRight, [horizontal + width, depth + length, height], [horizontal + width, depth, height]])}" fill="${side}" />
-    <polygon points="${points([farLeft, farRight, nearRight, nearLeft])}" fill="${top}" />
-  </g>`
-}
-
-function line(vertices: Point3[], className: string, attributes = ''): string {
-  const path = vertices.map((vertex, index) => `${index === 0 ? 'M' : 'L'} ${project(vertex).join(' ')}`).join(' ')
-  return `<path d="${path}" class="${className}" ${attributes} />`
+export const a30TokenAnchors: {
+  readonly hostLocal: Point2
+  readonly hostRemote: Point2
+  readonly device: Point2
+} = {
+  hostLocal: project([370, 240, 56]),
+  hostRemote: project([130, 240, 56]),
+  device: project([420, 412, 4]),
 }
 
 function part(topic: string, name: string, contents: string, lift: number, extra = ''): string {
@@ -93,43 +78,58 @@ function annotation(horizontal: number, depth: number, text: string, detail: str
   </g>`
 }
 
-export function createScene(): string {
-  const transferLinks = [
+export function createScene(idPrefix = 'diagram'): string {
+  const transferLinks: readonly { id: string; vertices: readonly Point3[] }[] = [
     { id: 'memory-local', vertices: [[370, 224, 8], [370, 202, 8], [328, 202, 8]] },
     { id: 'memory-remote', vertices: [[130, 224, 8], [130, 202, 8], [170, 202, 8]] },
     { id: 'socket-link', vertices: [[170, 202, 8], [190, 202, 8], [190, 188, 8], [308, 188, 8], [308, 202, 8], [328, 202, 8]] },
     { id: 'pcie-link', vertices: [[328, 202, 8], [300, 202, 8], [300, 310, 8], [350, 310, 8], [350, 340, 8]] },
     { id: 'gpu-link', vertices: [[350, 340, 8], [410, 340, 8], [410, 352, 8]] },
   ]
-  const copperTraces = [
+  const copperTraces: readonly (readonly Point3[])[] = [
     [[190, 134, 6], [230, 134, 6], [230, 94, 6], [270, 94, 6]],
     [[184, 142, 6], [240, 142, 6], [240, 103, 6], [270, 103, 6]],
     [[160, 300, 6], [160, 308, 6], [80, 308, 6], [80, 350, 6]],
     [[166, 300, 6], [166, 316, 6], [190, 316, 6], [190, 350, 6]],
     [[420, 300, 6], [420, 317, 6], [300, 317, 6], [300, 350, 6]],
   ]
-  const transferMarkup = transferLinks.map(connection => line(connection.vertices as Point3[], 'transfer-link', `data-link="${connection.id}"`)).join('')
-  let devices = cpu(80, 100, 0) + cpu(320, 100, 1)
-  devices += memoryBank(80, 230, 0) + memoryBank(320, 230, 1)
-  devices += [50, 160, 270, 380].map((horizontal, index) => gpu(horizontal, 350, index === 3 ? 0 : index + 1)).join('')
+  const transferMarkup = transferLinks.map(connection => line(connection.vertices, 'transfer-link', `data-link="${connection.id}"`)).join('')
+
   let nic = block(385, 32, 7, 86, 36, 13, 'network')
   nic += block(438, 35, 20, 24, 25, 4, 'chip')
   nic += block(390, 34, 20, 19, 12, 4, 'frame')
   nic += block(414, 34, 20, 19, 12, 4, 'frame')
 
-  const diagram = `<svg class="node-diagram" viewBox="0 0 900 570" xmlns="http://www.w3.org/2000/svg" aria-labelledby="diagram-title diagram-description">
-    <title id="diagram-title">Inside an HPC4 A30 GPU node, illustrative topology</title>
-    <desc id="diagram-description">An isometric schematic with two CPU sockets, host memory, four NVIDIA A30 GPUs and a network interface. Published hardware counts are factual; component positions, memory-module counts, affinities and wiring are illustrative. Select a component for its explanation.</desc>
+  // Depth-sort isometric hardware parts from back to front using shared depthKey
+  const hardwareParts = [
+    { key: nodeIso.depthKey(385, 32, 86, 36), svg: part('nic', 'Network interface, connection to the cluster fabric', nic, -20) },
+    { key: nodeIso.depthKey(80, 100, 100, 100), svg: cpu(80, 100, 0) },
+    { key: nodeIso.depthKey(320, 100, 100, 100), svg: cpu(320, 100, 1) },
+    { key: nodeIso.depthKey(80, 230, 100, 60), svg: memoryBank(80, 230, 0) },
+    { key: nodeIso.depthKey(320, 230, 100, 60), svg: memoryBank(320, 230, 1) },
+    ...[50, 160, 270, 380].map((horizontal, index) => ({
+      key: nodeIso.depthKey(horizontal, 350, 80, 70),
+      svg: gpu(horizontal, 350, index === 3 ? 0 : index + 1),
+    })),
+  ].sort((a, b) => a.key - b.key)
+
+  const titleId = `${idPrefix}-title`
+  const descId = `${idPrefix}-description`
+  const shadowId = `${idPrefix}-board-shadow`
+
+  const diagram = `<svg class="node-diagram" viewBox="0 0 900 570" xmlns="http://www.w3.org/2000/svg" aria-labelledby="${titleId} ${descId}">
+    <title id="${titleId}">Inside an HPC4 A30 GPU node, illustrative topology</title>
+    <desc id="${descId}">An isometric schematic with two CPU sockets, host memory, four NVIDIA A30 GPUs and a network interface. Published hardware counts are factual; component positions, memory-module counts, affinities and wiring are illustrative. Select a component for its explanation.</desc>
     <defs>
-      <filter id="board-shadow" x="-25%" y="-25%" width="150%" height="170%"><feGaussianBlur stdDeviation="13" /></filter>
+      <filter id="${shadowId}" x="-25%" y="-25%" width="150%" height="170%"><feGaussianBlur stdDeviation="13" /></filter>
     </defs>
-    <ellipse cx="462" cy="390" rx="288" ry="102" fill="#203f33" opacity="0.1" filter="url(#board-shadow)" />
+    <ellipse cx="462" cy="390" rx="288" ry="102" fill="#203f33" opacity="0.1" filter="url(#${shadowId})" />
     <g class="motherboard">
       ${block(0, 0, -22, 520, 460, 13, 'frame')}
       ${block(10, 10, -9, 500, 440, 12, 'board')}
       <polygon points="${points([[20, 20, 5], [250, 20, 5], [250, 330, 5], [20, 330, 5]])}" class="locality-zone zone-0" />
       <polygon points="${points([[260, 20, 5], [500, 20, 5], [500, 330, 5], [260, 330, 5]])}" class="locality-zone zone-1" />
-      ${copperTraces.map(vertices => line(vertices as Point3[], 'board-trace')).join('')}
+      ${copperTraces.map(vertices => line(vertices, 'board-trace')).join('')}
       ${transferMarkup}
       ${line([[80, 202, 7], [15, 202, 7], [15, 180, 7]], 'board-trace')}
       ${line([[438, 78, 7], [438, 210, 7], [470, 210, 7], [470, 320, 7]], 'network-trace')}
@@ -137,8 +137,7 @@ export function createScene(): string {
         const [positionHorizontal, positionDepth] = project([horizontal, depth, 5])
         return `<circle cx="${positionHorizontal}" cy="${positionDepth}" r="4" class="mount-hole" />`
       })).join('')}
-      ${devices}
-      ${part('nic', 'Network interface, connection to the cluster fabric', nic, -20)}
+      ${hardwareParts.map(item => item.svg).join('')}
     </g>
     <g class="diagram-connectors" aria-hidden="true">
       <path d="M 455 172 L 459 143 L 500 143" />
@@ -159,19 +158,13 @@ export function createScene(): string {
       ${line([[300, 220, 10], [300, 310, 10], [350, 310, 10], [350, 340, 10], [410, 340, 10]], 'bus-hit')}
       <title>PCI Express</title>
     </g>
-    <g class="motion-layer" aria-hidden="true">${transferLinks.map(connection => line(connection.vertices as Point3[], 'transfer-flow', `data-flow="${connection.id}"`)).join('')}</g>
-    <g class="buffer-markers" aria-hidden="true">
-      <g class="host-marker host-marker-local"><path d="M 562 289 L 533 320" /><circle cx="562" cy="276" r="19" /><text x="562" y="284" text-anchor="middle">H</text></g>
-      <g class="host-marker host-marker-remote"><path d="M 351 185 L 322 216" /><circle cx="351" cy="172" r="19" /><text x="351" y="180" text-anchor="middle">H</text></g>
-      <g class="device-marker"><path d="M 484 463 L 461 433" /><circle cx="484" cy="477" r="19" /><text x="484" y="485" text-anchor="middle">D</text></g>
-    </g>
+    <g class="motion-layer" aria-hidden="true">${transferLinks.map(connection => line(connection.vertices, 'transfer-flow', `data-flow="${connection.id}"`)).join('')}</g>
     <g class="diagram-scale" aria-hidden="true"><path d="M 84 484 H 153 M 84 480 V 488 M 153 480 V 488" /><text x="84" y="508">SCHEMATIC / NOT TO SCALE</text></g>
-    <g class="allocation-label" aria-hidden="true"><rect x="602" y="466" width="138" height="28" /><text x="671" y="484" text-anchor="middle">GPU 0 / ALLOCATED</text></g>
   </svg>`
   return diagram
 }
 
-function rackGlyph(horizontal: number, vertical: number, palette: string): string {
+function rackGlyph(horizontal: number, vertical: number, palette: IsoPaletteName): string {
   let contents = block(0, 0, 0, 72, 42, 74, 'frame')
   for (let shelf = 0; shelf < 3; shelf++) {
     contents += block(7, 43, 10 + shelf * 20, 58, 2, 13, palette)
@@ -182,7 +175,7 @@ function rackGlyph(horizontal: number, vertical: number, palette: string): strin
 }
 
 export function createClusterScene(): string {
-  const families: { id: ClusterTopicId; name: string; subtitle: string; horizontal: number; palette: string }[] = [
+  const families: { id: ClusterTopicId; name: string; subtitle: string; horizontal: number; palette: IsoPaletteName }[] = [
     { id: 'login', name: 'LOGIN', subtitle: 'Access + preparation', horizontal: 105, palette: 'network' },
     { id: 'cpu-nodes', name: 'CPU NODES', subtitle: 'Intel / AMD', horizontal: 315, palette: 'cpu' },
     { id: 'a30', name: 'A30 NODES', subtitle: '4 GPUs per node', horizontal: 495, palette: 'gpu' },

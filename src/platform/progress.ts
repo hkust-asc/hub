@@ -4,7 +4,30 @@ import { weeks } from './curriculum.ts'
 
 type Disk = Pick<Storage, 'getItem' | 'setItem'>
 type Position = { positionMs: number; durationMs: number; beat: number; total: number }
-type Bookmark = Position & { completed: boolean }
+export type Bookmark = Position & { completed: boolean }
+
+export function resolveSavedStep(saved: Bookmark | undefined, stepCount: number): number {
+  if (!saved || stepCount <= 0) return 0
+  if (saved.positionMs <= 0 || saved.positionMs >= saved.durationMs) return 0
+  if (saved.total === stepCount) {
+    return Math.max(0, Math.min(stepCount - 1, saved.beat))
+  }
+  const proportional = Math.floor((saved.positionMs / saved.durationMs) * stepCount)
+  return Math.max(0, Math.min(stepCount - 1, proportional))
+}
+
+export function stepBookmarkPosition(stepIndex: number, stepCount: number, completed: boolean): Position {
+  const safeTotal = Math.max(1, stepCount)
+  const clamped = Math.max(0, Math.min(safeTotal - 1, stepIndex))
+  const durationMs = safeTotal * 1000
+  const positionMs = completed && clamped === safeTotal - 1 ? durationMs : clamped * 1000
+  return {
+    positionMs,
+    durationMs,
+    beat: clamped,
+    total: safeTotal,
+  }
+}
 const key = 'hpc4:learning:v1'
 const questIds = new Set(weeks.flatMap(w => w.quests.map(q => `${w.id}/${q.id}`)))
 

@@ -9,22 +9,16 @@ import {
   popTrail,
   pushTrail,
 } from '../src/catalog.ts'
-import { initialState, jobSteps, scenarios, stages, transferPath, updateState } from '../src/model.ts'
-import { frameAt as jobFrameAt, timeline as jobTimeline } from '../src/first-job/story.ts'
-import { frameAt as gpuFrameAt, timeline as gpuTimeline } from '../src/host-to-gpu/story.ts'
-import { frameAt as filesystemFrameAt, timeline as filesystemTimeline } from '../src/linux-fs/story.ts'
-import {
-  frameAt as moduleFrameAt,
-  moduleMotion,
-  moduleNodes,
-  moduleWires,
-  timeline as moduleTimeline,
-} from '../src/module-load/story.ts'
-import { computeSchematicLayouts } from '../src/schematic/layout.ts'
-import { createMotionSampler } from '../src/schematic/motion.ts'
-import { frameAt as sshFrameAt, timeline as sshTimeline } from '../src/ssh-tmux/story.ts'
-import { frameAt as streamsFrameAt, timeline as streamsTimeline } from '../src/streams/story.ts'
-import type { PlaybackState } from '../src/timed-lesson/timeline.ts'
+import { createIsoProjector } from '../src/iso.ts'
+import { initialState, transferPath, updateState } from '../src/model.ts'
+import { evaluateJobStep, jobStageSpec, jobSteps } from '../src/first-job/story.ts'
+import { evaluateGpuStep, gpuSteps } from '../src/host-to-gpu/story.ts'
+import { evaluateFsStep, fsStageSpec, fsSteps } from '../src/linux-fs/story.ts'
+import { evaluateModuleStep, moduleStageSpec, moduleSteps } from '../src/module-load/story.ts'
+import { evaluateSshStep, sshStageSpec, sshSteps } from '../src/ssh-tmux/story.ts'
+import { evaluateStreamStep, streamStageSpec, streamSteps } from '../src/streams/story.ts'
+import { planCameraViewBox, validateStageSpec } from '../src/stage/layout.ts'
+import { createInitialRunnerState, reduceRunnerState } from '../src/stage/runner.ts'
 
 test('a local H2D path does not cross the inter-socket link', () => {
   assert.deepEqual(transferPath(2, 'local'), ['memory-local', 'pcie-link', 'gpu-link'])
@@ -44,355 +38,273 @@ test('allocation, preparation, computation, and completion do not show a transfe
   for (const step of [0, 1, 3, 5]) assert.deepEqual(transferPath(step, 'local'), [])
 })
 
-test('scenario navigation clamps at its boundaries and selects the matching topic', () => {
-  assert.equal(updateState(initialState, { type: 'step', step: -1 }).step, 0)
-  const last = updateState(initialState, { type: 'step', step: 100 })
-  assert.equal(last.step, stages.length - 1)
-  assert.equal(last.selected, 'slurm')
-})
-
-test('playback reaches completion, stops, and can replay from the beginning', () => {
-  let state = updateState(initialState, { type: 'play' })
-  for (let count = 0; count < stages.length; count++) state = updateState(state, { type: 'tick' })
-  assert.equal(state.step, stages.length - 1)
-  assert.equal(state.playing, false)
-  state = updateState(state, { type: 'play' })
-  assert.equal(state.step, 0)
-  assert.equal(state.playing, true)
-})
-
-test('exploration and explicit selection stop playback without losing placement', () => {
-  const playing = updateState({ ...initialState, placement: 'remote' }, { type: 'play' })
-  const selected = updateState(playing, { type: 'select', topic: 'numa' })
-  assert.equal(selected.playing, false)
+test('explicit selection and placement preserve explore state', () => {
+  const remote = updateState(initialState, { type: 'placement', placement: 'remote' })
+  const selected = updateState(remote, { type: 'select', topic: 'numa' })
+  assert.equal(selected.selected, 'numa')
   assert.equal(selected.placement, 'remote')
-  assert.equal(updateState(playing, { type: 'mode', mode: 'explore' }).playing, false)
 })
 
-test('reset restores the initial placement and view while preserving the active mode', () => {
-  const changed = { ...initialState, mode: 'scenario' as const, placement: 'remote' as const, exploded: true, step: 3, playing: true }
-  assert.deepEqual(updateState(changed, { type: 'reset' }), { ...initialState, mode: 'scenario', scene: 'a30', selected: 'slurm' })
+test('reset-view restores placement and exploded layers while keeping active subject', () => {
+  const changed = { ...initialState, scene: 'a30' as const, selected: 'pcie' as const, placement: 'remote' as const, exploded: true }
+  assert.deepEqual(updateState(changed, { type: 'reset-view' }), {
+    ...changed,
+    placement: 'local',
+    exploded: false,
+  })
+  assert.deepEqual(updateState(changed, { type: 'reset' }), { ...initialState, scene: 'a30' })
 })
 
-test('a connected scenario owns the scene and subject at each step', () => {
-  let state = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  assert.equal(state.scene, 'cluster')
-  assert.equal(state.clusterSelected, 'login')
-  for (let step = 0; step < jobSteps.length; step++) {
-    state = updateState(state, { type: 'step', step })
-    assert.equal(state.scene, jobSteps[step]!.scene)
-    assert.equal(state.clusterSelected, jobSteps[step]!.clusterTopic)
-    assert.equal(state.selected, jobSteps[step]!.topic)
-  }
-})
-
-test('the connected scenario enters the node and returns to shared storage', () => {
-  const started = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  const transferIndex = jobSteps.findIndex(step => step.nodeStep === 2)
-  const transfer = updateState(started, { type: 'step', step: transferIndex })
-  assert.equal(transfer.scene, 'a30')
-  assert.deepEqual(transferPath(jobSteps[transfer.step]!.nodeStep!, 'remote'), ['memory-remote', 'socket-link', 'pcie-link', 'gpu-link'])
-  const save = updateState(transfer, { type: 'step', step: 8 })
-  assert.equal(save.scene, 'cluster')
-  assert.equal(save.clusterSelected, 'storage')
-})
-
-test('manual navigation pauses without losing scenario position or node placement', () => {
-  const started = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  const transfer = updateState({ ...started, placement: 'remote', exploded: true }, { type: 'step', step: 5 })
-  const playing = updateState(transfer, { type: 'play' })
-  const overview = updateState(playing, { type: 'navigate', scene: 'cluster' })
-  assert.equal(overview.playing, false)
-  assert.equal(overview.mode, 'explore')
-  assert.equal(overview.step, 5)
-  assert.equal(overview.placement, 'remote')
-  assert.equal(overview.exploded, true)
-  const resumed = updateState(overview, { type: 'play' })
-  assert.equal(resumed.scene, 'a30')
-  assert.equal(resumed.step, 5)
-})
-
-test('switching scenarios resets the step and cannot retain the previous scene', () => {
-  const last = updateState(updateState(initialState, { type: 'start-scenario', scenario: 'first-job' }), { type: 'step', step: 9 })
-  const gpu = updateState(last, { type: 'start-scenario', scenario: 'gpu-copy' })
-  assert.equal(gpu.step, 0)
-  assert.equal(gpu.scene, 'a30')
-  assert.equal(gpu.selected, 'slurm')
-})
-
-test('both scenario lengths clamp, finish, and replay independently', () => {
-  for (const scenario of ['gpu-copy', 'first-job'] as const) {
-    let state = updateState(initialState, { type: 'start-scenario', scenario })
-    state = updateState(state, { type: 'step', step: 100 })
-    assert.equal(state.step, scenarios[scenario].steps.length - 1)
-    state = updateState(state, { type: 'play' })
-    assert.equal(state.step, 0)
-    for (let tick = 0; tick <= scenarios[scenario].steps.length; tick++) state = updateState(state, { type: 'tick' })
-    assert.equal(state.playing, false)
-    assert.equal(state.step, scenarios[scenario].steps.length - 1)
-  }
-})
-
-test('browsing a software subject selects its owning scene and pauses the journey', () => {
-  const started = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  const running = updateState({ ...updateState(started, { type: 'step', step: 5 }), placement: 'remote', exploded: true }, { type: 'play' })
-  const software = updateState(running, { type: 'browse', scene: 'cluster', topic: 'lmod' })
-  assert.equal(software.scene, 'cluster')
-  assert.equal(software.clusterSelected, 'lmod')
-  assert.equal(software.mode, 'explore')
-  assert.equal(software.playing, false)
-  assert.equal(software.step, 5)
-  assert.equal(software.placement, 'remote')
-  assert.equal(software.exploded, true)
-  const resumed = updateState(software, { type: 'mode', mode: 'scenario' })
-  assert.equal(resumed.scene, 'a30')
-  assert.equal(resumed.step, 5)
-})
-
-test('browsing node components and the overview is one coherent navigation action', () => {
+test('browsing node components, software subjects, and overview is one coherent navigation action', () => {
   const node = updateState(initialState, { type: 'browse', scene: 'a30', topic: 'numa' })
   assert.equal(node.scene, 'a30')
   assert.equal(node.selected, 'numa')
-  const overview = updateState(node, { type: 'browse', scene: 'cluster' })
+  const software = updateState(node, { type: 'browse', scene: 'cluster', topic: 'lmod' })
+  assert.equal(software.scene, 'cluster')
+  assert.equal(software.clusterSelected, 'lmod')
+  const overview = updateState(software, { type: 'browse', scene: 'cluster' })
   assert.equal(overview.clusterSelected, 'a30')
-  assert.equal(overview.mode, 'explore')
   const returned = updateState(overview, { type: 'browse', scene: 'a30' })
   assert.equal(returned.selected, 'numa')
 })
 
-test('resetting the node view does not rewind, pause, or change the active scenario', () => {
-  const started = updateState(initialState, { type: 'start-scenario', scenario: 'first-job' })
-  const running = updateState({ ...updateState(started, { type: 'step', step: 5 }), placement: 'remote', exploded: true }, { type: 'play' })
-  assert.deepEqual(updateState(running, { type: 'reset-view' }), { ...running, placement: 'local', exploded: false })
+test('shared isometric projector preserves 2:1 orthographic ratio and back-to-front depth order', () => {
+  const proj = createIsoProjector({ originX: 100, originY: 50, scale: 0.88 })
+  const [x0, y0] = proj.project([0, 0, 0])
+  const [x1, y1] = proj.project([10, 0, 0])
+  const [x2, y2] = proj.project([0, 10, 0])
+  assert.equal(x0, 100)
+  assert.equal(y0, 50)
+  assert.equal(Math.round(((x1 - x0) / (y1 - y0)) * 100) / 100, 2)
+  assert.equal(Math.round(((x0 - x2) / (y2 - y0)) * 100) / 100, 2)
+  assert.ok(proj.depthKey(80, 100, 100, 100) < proj.depthKey(80, 230, 100, 60))
+  assert.ok(proj.depthKey(80, 230, 100, 60) < proj.depthKey(380, 350, 80, 70))
 })
 
-test('at normal speed each timed lesson takes twice its authored duration', () => {
-  const playing: PlaybackState = { positionMs: 0, startedAt: 0, inspection: null, rate: 1 }
-  for (const timeline of [jobTimeline, gpuTimeline, sshTimeline, streamsTimeline, filesystemTimeline, moduleTimeline]) {
-    const nextBeat = timeline.beats[1]!.startMs * 2
-    assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat - 1)).index, 0)
-    assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat)).index, 1)
-    assert.equal(timeline.positionAt(playing, timeline.durationMs * 2 - 1), timeline.durationMs - 0.5)
-    assert.equal(timeline.positionAt(playing, timeline.durationMs * 2), timeline.durationMs)
+test('legacy scenario hashes and step deep-links parse cleanly', () => {
+  assert.deepEqual(parseRoute('#scenario/first-job'), { view: 'lesson', lesson: 'first-job' })
+  assert.deepEqual(parseRoute('#scenario/gpu-copy'), { view: 'lesson', lesson: 'host-to-gpu' })
+  assert.deepEqual(parseRoute('#lesson/streams/3'), { view: 'lesson', lesson: 'streams', step: 3 })
+  assert.deepEqual(parseRoute('#lesson/streams/0'), { view: 'lesson', lesson: 'streams' })
+  assert.deepEqual(parseRoute('#lesson/streams/nope'), { view: 'lesson', lesson: 'streams' })
+})
+
+test('every schematic and 2.5D stage spec has non-overlapping bounds and valid wire routes in wide and compact modes', () => {
+  const suites = [
+    { spec: moduleStageSpec, steps: moduleSteps.length },
+    { spec: jobStageSpec, steps: jobSteps.length },
+    { spec: sshStageSpec, steps: sshSteps.length },
+    { spec: streamStageSpec, steps: streamSteps.length },
+    { spec: fsStageSpec, steps: fsSteps.length },
+  ] as const
+
+  for (const { spec, steps } of suites) {
+    const issues = validateStageSpec(spec as never, steps, ['default'])
+    assert.deepEqual(issues, [], `Layout issues in ${spec.id}: ${issues.join('; ')}`)
   }
 })
 
-test('changing playback speed preserves the fractional playhead and inspection intent', () => {
-  const state: PlaybackState = { positionMs: 4000, startedAt: 1000, inspection: null, rate: 1 }
-  const fast = gpuTimeline.update(state, { type: 'rate', rate: 2 }, 1885)
-  assert.equal(gpuTimeline.positionAt(fast, 1885), 4442.5)
-  const inspected = gpuTimeline.update(fast, { type: 'inspect' }, 2000)
-  const slow = gpuTimeline.update(inspected, { type: 'rate', rate: .5 }, 6000)
-  assert.equal(gpuTimeline.positionAt(slow, 6500), 4557.5)
-  const resumed = gpuTimeline.update(slow, { type: 'inspect' }, 7000)
-  assert.equal(gpuTimeline.positionAt(resumed, 8000), 4807.5)
+test('stage runner rests in reader-paced mode, advances on autoplay dwell, freezes in inspect, and replays on variant switch', () => {
+  let state = createInitialRunnerState({
+    steps: gpuSteps,
+    defaultVariant: 'local' as 'local' | 'remote',
+  })
+  assert.equal(state.stepIndex, 0)
+  assert.equal(state.beatProgress, 0)
+
+  // Reader-paced tick advances beatProgress to 1 and holds without changing step
+  state = reduceRunnerState(state, { type: 'tick', dtMs: 2000, reducedMotion: false }, gpuSteps)
+  assert.equal(state.stepIndex, 0)
+  assert.equal(state.beatProgress, 1)
+  state = reduceRunnerState(state, { type: 'tick', dtMs: 5000, reducedMotion: false }, gpuSteps)
+  assert.equal(state.stepIndex, 0)
+
+  // Inspect preserves autoplay intent and freezes beatProgress
+  state = reduceRunnerState(state, { type: 'goto', stepIndex: 2 }, gpuSteps)
+  state = reduceRunnerState(state, { type: 'toggle-autoplay' }, gpuSteps)
+  state = reduceRunnerState(state, { type: 'tick', dtMs: 500, reducedMotion: false }, gpuSteps)
+  const midBeat = state.beatProgress
+  assert.ok(midBeat > 0 && midBeat < 1)
+
+  state = reduceRunnerState(state, { type: 'toggle-inspect' }, gpuSteps)
+  assert.equal(state.inspecting, true)
+  assert.equal(state.autoplay, false)
+  state = reduceRunnerState(state, { type: 'tick', dtMs: 3000, reducedMotion: false }, gpuSteps)
+  assert.equal(state.beatProgress, midBeat)
+
+  state = reduceRunnerState(state, { type: 'toggle-inspect' }, gpuSteps)
+  assert.equal(state.inspecting, false)
+  assert.equal(state.autoplay, true)
+
+  // Variant switch pauses autoplay and replays the current step's causal beat
+  state = reduceRunnerState(state, { type: 'set-variant', variant: 'remote' }, gpuSteps)
+  assert.equal(state.variant, 'remote')
+  assert.equal(state.autoplay, false)
+  assert.equal(state.beatProgress, 0)
+
+  // Reduced motion snaps beatProgress to 1 and advances autoplay after dwellMs
+  state = reduceRunnerState(state, { type: 'toggle-autoplay' }, gpuSteps, true)
+  state = reduceRunnerState(state, { type: 'tick', dtMs: 2800, reducedMotion: true }, gpuSteps, true)
+  assert.equal(state.stepIndex, 3)
+  assert.equal(state.beatProgress, 1)
 })
 
-test('copying retains the source, and cross-socket changes the arrival and the callout', () => {
-  const copyIn = gpuTimeline.beats.find(beat => beat.id === 'copy-in')!.startMs
-  const local = gpuFrameAt(copyIn + 2800, 'local')
-  assert.equal(local.host, 'Input')
-  assert.equal(local.device, 'Input')
-  assert.equal(local.copy?.progress, null)
-  const remote = gpuFrameAt(copyIn + 2800, 'remote')
-  assert.equal(remote.host, 'Input')
-  assert.equal(remote.device, null)
-  assert.equal(remote.note.anchor, 'socket-link')
-  assert.ok(remote.copy?.progress)
-  assert.equal(gpuFrameAt(copyIn + 3300, 'remote').device, 'Input')
+test('camera planner bounds zoomed viewBox and respects fitOverride', () => {
+  const boxes = {
+    a: { x: 20, y: 20, w: 120, h: 80 },
+    b: { x: 640, y: 200, w: 180, h: 90 },
+  }
+  const zoomed = planCameraViewBox({
+    sceneSize: { w: 900, h: 360 },
+    boxes,
+    focus: ['a'],
+  })
+  assert.equal(zoomed.zoomed, true)
+  assert.ok(zoomed.rect.w < 900)
+  assert.equal(Math.round((zoomed.rect.w / zoomed.rect.h) * 10), 25)
+
+  const fitted = planCameraViewBox({
+    sceneSize: { w: 900, h: 360 },
+    boxes,
+    focus: ['a'],
+    fitOverride: true,
+  })
+  assert.equal(fitted.zoomed, false)
+  assert.deepEqual(fitted.rect, { x: 0, y: 0, w: 900, h: 360 })
 })
 
-test('seeking reconstructs computation, the return copy, and buffer release', () => {
-  const done = gpuFrameAt(gpuTimeline.durationMs, 'local')
-  assert.equal(done.host, null)
-  assert.equal(done.device, null)
-  const compute = gpuTimeline.beats.find(beat => beat.id === 'compute')!.startMs
-  assert.equal(gpuFrameAt(compute + 1, 'local').signal?.kind, 'launch')
-  assert.equal(gpuFrameAt(compute + 3199, 'local').device, 'Input')
-  const computed = gpuFrameAt(compute + 3200, 'local')
+test('Host to GPU retains source buffers across copies, delays cross-socket arrival, and frees on finish', () => {
+  const localMid = evaluateGpuStep(2, 0.72, 'local')
+  assert.equal(localMid.host, 'Input')
+  assert.equal(localMid.device, 'Input')
+  assert.equal(localMid.copy?.progress, null)
+
+  const remoteMid = evaluateGpuStep(2, 0.72, 'remote')
+  assert.equal(remoteMid.host, 'Input')
+  assert.equal(remoteMid.device, null)
+  assert.ok(remoteMid.copy?.progress !== null)
+  assert.equal(evaluateGpuStep(2, 0.9, 'remote').device, 'Input')
+
+  // Compute updates HBM2 only; Host RAM stays Input until D2H
+  const computed = evaluateGpuStep(3, 1, 'local')
   assert.equal(computed.host, 'Input')
   assert.equal(computed.device, 'Result')
   assert.equal(computed.copy, null)
-  const copyOut = gpuTimeline.beats.find(beat => beat.id === 'copy-out')!.startMs
-  assert.equal(gpuFrameAt(copyOut + 2499, 'local').host, 'Input')
-  const copied = gpuFrameAt(copyOut + 2500, 'local')
-  assert.equal(copied.host, 'Result')
-  assert.equal(copied.device, 'Result')
+
+  const copiedBack = evaluateGpuStep(4, 1, 'local')
+  assert.equal(copiedBack.host, 'Result')
+  assert.equal(copiedBack.device, 'Result')
+
+  const finished = evaluateGpuStep(5, 1, 'local')
+  assert.equal(finished.host, null)
+  assert.equal(finished.device, null)
+  assert.equal(finished.allocated, false)
 })
 
-test('the SSH loss and the foreground terminal closing are distinct moments', () => {
-  const shell = sshTimeline.beats.find(beat => beat.id === 'shell')!.startMs
-  const dropped = sshFrameAt(shell + 2600)
-  assert.equal(dropped.connection.status, 'lost')
-  assert.equal(dropped.shell, 'open')
-  assert.equal(dropped.process?.status, 'running')
-  const closed = sshFrameAt(shell + 3400)
-  assert.equal(closed.shell, 'closed')
-  assert.equal(closed.process?.status, 'stopped')
-  assert.equal(closed.process?.progress, sshFrameAt(shell + 5000).process?.progress)
-  assert.equal(closed.file, false)
+test('SSH & tmux distinguishes foreground hangup from detached server persistence and file creation', () => {
+  const dropped = evaluateSshStep(1, 0.55)
+  assert.equal(dropped.wires.connection.faultMark, true)
+  assert.equal(dropped.entities.shell.badge, 'open')
+
+  const stopped = evaluateSshStep(1, 1)
+  assert.equal(stopped.entities.shell.badge, 'closed')
+  assert.equal(stopped.entities.process.badge, 'stopped')
+  assert.equal(stopped.entities.file.hidden, true)
+
+  const detachedOffline = evaluateSshStep(3, 1)
+  assert.equal(detachedOffline.wires.connection.faultMark, true)
+  assert.equal(detachedOffline.entities.tmux.badge, 'detached')
+  assert.equal(detachedOffline.entities.process.badge, '85%')
+  assert.equal(detachedOffline.entities.file.hidden, true)
+
+  const reattachedDone = evaluateSshStep(4, 1)
+  assert.equal(reattachedDone.entities.tmux.badge, 'attached')
+  assert.equal(reattachedDone.entities.process.badge, 'done')
+  assert.equal(reattachedDone.entities.file.hidden, false)
 })
 
-test('detaching leaves SSH connected, and the task advances across the later disconnect', () => {
-  const detach = sshTimeline.beats.find(beat => beat.id === 'detach')!.startMs
-  const unplugged = sshFrameAt(detach + 600)
-  assert.equal(unplugged.tmux, 'detached')
-  assert.equal(unplugged.connection.status, 'connected')
-  const offline = sshFrameAt(detach + 4000)
-  assert.equal(offline.connection.status, 'lost')
-  assert.equal(offline.shell, 'closed')
-  assert.equal(offline.process?.terminal, 'tmux')
-  assert.equal(offline.process?.status, 'running')
-  assert.ok(offline.process!.progress > unplugged.process!.progress)
+test('Streams separates stdout, pauses at prediction, and quiets the terminal when both ports redirect', () => {
+  const mixed = evaluateStreamStep(0, 1)
+  assert.equal(mixed.entities.terminal.rows?.length, 3)
+  assert.equal(mixed.entities.passcode.hidden, true)
+  assert.equal(mixed.entities.errors.hidden, true)
+
+  const stdoutOnly = evaluateStreamStep(1, 1)
+  assert.equal(stdoutOnly.entities.passcode.rows?.[0]?.kind, 'code')
+  assert.equal(stdoutOnly.entities.terminal.rows?.length, 2)
+  assert.equal(stdoutOnly.entities.errors.hidden, true)
+
+  const prediction = evaluateStreamStep(2, 1)
+  assert.equal(prediction.entities.stderr.operator, '?')
+  assert.equal(prediction.wires['err-file'].visible, false)
+  assert.equal(prediction.packets?.length, 0)
+
+  const routed = evaluateStreamStep(3, 1)
+  assert.equal(routed.entities.stderr.operator, '2>')
+  assert.equal(routed.entities.terminal.badge, 'quiet')
+  assert.equal(routed.entities.errors.rows?.length, 2)
 })
 
-test('reattaching does not restart the task and seeking before completion hides the file', () => {
-  const reconnect = sshTimeline.beats.find(beat => beat.id === 'return')!.startMs
-  const done = sshFrameAt(sshTimeline.durationMs)
-  assert.equal(done.process?.status, 'done')
-  assert.equal(done.file, true)
-  const before = sshFrameAt(reconnect + 1349)
-  const attached = sshFrameAt(reconnect + 1350)
-  assert.equal(before.tmux, 'detached')
-  assert.equal(attached.tmux, 'attached')
-  assert.ok(attached.process!.progress >= before.process!.progress)
-  assert.equal(sshFrameAt(reconnect + 2199).file, false)
-  assert.equal(sshFrameAt(0).tmux, 'absent')
-  assert.equal(sshFrameAt(0).process, null)
+test('Linux filesystem preserves pwd on ls -a, contrasts relative vs absolute cd, and reveals mounts cleanly', () => {
+  const home = evaluateFsStep(1, 0.3)
+  const listed = evaluateFsStep(1, 1)
+  assert.equal(home.pins?.[0]?.target, 'user-home')
+  assert.equal(listed.pins?.[0]?.target, 'user-home')
+  assert.equal(home.entities.dotfile.dashed, true)
+  assert.equal(listed.entities.dotfile.dashed, false)
+
+  assert.equal(evaluateFsStep(2, 1).pins?.[0]?.target, 'workspace')
+  assert.equal(evaluateFsStep(3, 1).pins?.[0]?.target, 'quest')
+
+  const mounts = evaluateFsStep(4, 1)
+  assert.equal(mounts.entities['local-disk'].hidden, false)
+  assert.equal(mounts.entities['shared-storage'].hidden, false)
+  assert.equal(mounts.wires['mount-home'].visible, true)
+  assert.equal(evaluateFsStep(1, 1).entities['shared-storage'].hidden, true)
 })
 
-test('redirecting stdout leaves stderr on the terminal and preserves the output order', () => {
-  const plain = streamsFrameAt(5000)
-  assert.deepEqual(plain.contents.terminal.map(line => line.channel), ['stderr', 'stdout', 'stderr'])
-  assert.equal(plain.showPasscode, false)
-  assert.equal(plain.showErrors, false)
+test('Job walkthrough keeps interactive shell on login01, wires Lmod on gpu01, and streams output to shared scratch', () => {
+  const submitted = evaluateJobStep(0, 1)
+  assert.equal(submitted.entities.slurm.badge, 'PD')
+  assert.equal(submitted.entities.compute.dimmed, true)
 
-  const redirected = streamsFrameAt(11000)
-  assert.deepEqual(redirected.contents.passcode.map(line => line.channel), ['stdout'])
-  assert.deepEqual(redirected.contents.terminal.map(line => line.channel), ['stderr', 'stderr'])
-  assert.equal(redirected.showErrors, false)
+  const allocated = evaluateJobStep(1, 1)
+  assert.equal(allocated.entities.compute.subtitle, 'Allocated')
+  assert.equal(allocated.entities.gpu.subtitle, 'Allocated')
+
+  const modules = evaluateJobStep(2, 1)
+  assert.equal(modules.entities.env.badge, 'Lmod ready')
+
+  const executed = evaluateJobStep(3, 1)
+  assert.equal(executed.entities.gpu.subtitle, 'Done')
+  assert.equal(executed.wires.submit.visible, false)
+  assert.equal(executed.wires['scratch-write'].visible, true)
+
+  const finished = evaluateJobStep(4, 1)
+  assert.equal(finished.entities.slurm.badge, 'CD · DONE')
+  assert.equal(finished.entities.compute.dimmed, true)
+  assert.equal(finished.wires['scratch-read'].visible, true)
 })
 
-test('prediction withholds port 2 routing and reveal separates both files', () => {
-  const pending = streamsFrameAt(14700 - 1)
-  assert.equal(pending.route.stderr, null)
-  assert.equal(pending.showErrors, true)
-  assert.equal(pending.quiet, false)
-  assert.equal(pending.inFlight.length, 0)
-  assert.equal(pending.contents.errors.length, 0)
+test('Environment modules rewires shell variables, switches versions cleanly, and isolates batch shells', () => {
+  const miss = evaluateModuleStep(0, 1)
+  assert.equal(miss.entities.os.badge, 'miss')
+  assert.equal(miss.entities.spack.badge, 'shared')
 
-  const revealed = streamsFrameAt(14700)
-  assert.equal(revealed.route.stderr, 'errors')
-  assert.equal(revealed.contents.errors.length, 0)
-  const settled = streamsFrameAt(17500)
-  assert.equal(settled.quiet, true)
-  assert.deepEqual(settled.contents.terminal, [])
-  assert.deepEqual(settled.contents.passcode.map(line => line.channel), ['stdout'])
-  assert.deepEqual(settled.contents.errors.map(line => line.channel), ['stderr', 'stderr'])
+  const loaded = evaluateModuleStep(1, 1)
+  assert.equal(loaded.entities.lmod.badge, '1 loaded')
+  assert.equal(loaded.entities.env.badge, 'login01')
+  assert.equal(loaded.wires['env-spack'].visible, false)
 
-  const rewind = streamsFrameAt(2000)
-  assert.equal(rewind.showPasscode, false)
-  assert.equal(rewind.showErrors, false)
-  assert.deepEqual(rewind.inFlight.map(flight => flight.destination), ['terminal', 'terminal', 'terminal'])
-})
+  const resolved = evaluateModuleStep(2, 1)
+  assert.equal(resolved.entities.spack.badge, 'hit')
 
-test('listing dotfiles does not change the working directory', () => {
-  const before = filesystemFrameAt(8699)
-  const listed = filesystemFrameAt(8700)
-  assert.equal(before.cwd, 'user-home')
-  assert.equal(listed.cwd, before.cwd)
-  assert.equal(before.showDotfile, false)
-  assert.equal(listed.showDotfile, true)
-})
+  const switched = evaluateModuleStep(3, 1)
+  assert.equal(switched.entities.spack.badge, 'hit 11.8')
 
-test('relative and absolute traces resolve from different starting points', () => {
-  const relative = filesystemFrameAt(12300)
-  assert.equal(relative.trace?.kind, 'relative')
-  assert.equal(relative.cwd, 'workspace')
-  const resolving = filesystemFrameAt(14500)
-  assert.equal(resolving.trace?.kind, 'absolute')
-  assert.ok(resolving.trace!.progress > 0 && resolving.trace!.progress < 1)
-  assert.equal(resolving.cwd, 'workspace')
-  assert.equal(filesystemFrameAt(15500).cwd, 'quest')
-})
-
-test('rewinding from shared mounts restores the tree before the storage reveal', () => {
-  const mount = filesystemFrameAt(22500)
-  assert.equal(mount.mounts, 'shared')
-  assert.equal(mount.cwd, null)
-  assert.equal(filesystemFrameAt(20000).mounts, 'local')
-  const earlier = filesystemFrameAt(7000)
-  assert.equal(earlier.mounts, 'none')
-  assert.equal(earlier.showDotfile, false)
-  assert.equal(earlier.cwd, 'user-home')
-})
-
-test('sbatch queues a pending job while keeping the interactive shell on login01', () => {
-  const initial = jobFrameAt(1000)
-  assert.equal(initial.login.shellOpen, true)
-  assert.equal(initial.slurm.status, 'idle')
-  assert.equal(initial.compute.allocated, false)
-  assert.equal(initial.scratchOutput, false)
-
-  const inFlight = jobFrameAt(3000)
-  assert.equal(inFlight.activeWire, 'submit')
-  assert.equal(inFlight.packet?.wire, 'submit')
-  assert.equal(inFlight.slurm.status, 'idle')
-
-  const queued = jobFrameAt(4200)
-  assert.equal(queued.login.shellOpen, true)
-  assert.equal(queued.slurm.status, 'pending')
-  assert.equal(queued.compute.allocated, false)
-  assert.equal(queued.env.status, 'absent')
-})
-
-test('allocation grants gpu01 before module load updates the batch shell environment', () => {
-  const allocateStart = jobTimeline.beats.find(beat => beat.id === 'allocate')!.startMs
-  const granting = jobFrameAt(allocateStart + 2800)
-  assert.equal(granting.slurm.status, 'running')
-  assert.equal(granting.packet?.wire, 'allocate')
-  assert.equal(granting.compute.allocated, false)
-
-  const allocated = jobFrameAt(allocateStart + 3800)
-  assert.equal(allocated.compute.allocated, true)
-  assert.equal(allocated.gpu.status, 'allocated')
-  assert.equal(allocated.env.status, 'starting')
-
-  const modulesStart = jobTimeline.beats.find(beat => beat.id === 'modules')!.startMs
-  assert.equal(jobFrameAt(modulesStart + 1000).env.status, 'starting')
-  assert.equal(jobFrameAt(modulesStart + 1000).activeWire, 'script-read')
-  assert.equal(jobFrameAt(modulesStart + 3200).env.status, 'loaded')
-})
-
-test('job output streams directly to shared scratch, survives node release, and clears on rewind', () => {
-  const executeStart = jobTimeline.beats.find(beat => beat.id === 'execute')!.startMs
-  const computing = jobFrameAt(executeStart + 1500)
-  assert.equal(computing.gpu.status, 'running')
-  assert.equal(computing.activeWire, null)
-  assert.equal(computing.scratchOutput, false)
-
-  const writing = jobFrameAt(executeStart + 3800)
-  assert.equal(writing.activeWire, 'scratch-write')
-  assert.equal(writing.packet?.wire, 'scratch-write')
-  assert.equal(writing.scratchOutput, false)
-  assert.equal(jobFrameAt(executeStart + 5000).scratchOutput, true)
-
-  const finishStart = jobTimeline.beats.find(beat => beat.id === 'finish')!.startMs
-  const released = jobFrameAt(finishStart + 1000)
-  assert.equal(released.slurm.status, 'completed')
-  assert.equal(released.compute.allocated, false)
-  assert.equal(released.compute.released, true)
-  assert.equal(released.gpu.status, 'released')
-  assert.equal(released.scratchOutput, true)
-
-  const reading = jobFrameAt(finishStart + 2600)
-  assert.equal(reading.activeWire, 'scratch-read')
-  assert.equal(reading.login.activity, 'reading')
-
-  const rewound = jobFrameAt(1500)
-  assert.equal(rewound.scratchOutput, false)
-  assert.equal(rewound.compute.released, false)
-  assert.equal(rewound.slurm.status, 'idle')
+  const batch = evaluateModuleStep(4, 1)
+  assert.equal(batch.entities.batch.badge, 'running')
+  assert.equal(batch.entities.env.badge, 'gpu01')
 })
 
 test('legacy lesson query URLs normalize into unified hash routes', () => {
@@ -418,87 +330,6 @@ test('catalog routes default to all entries and preserve domain, scene, and less
   assert.deepEqual(parseRoute('#lesson/first-job'), { view: 'lesson', lesson: 'first-job' })
   assert.deepEqual(parseRoute('#lesson/module-load'), { view: 'lesson', lesson: 'module-load' })
   assert.deepEqual(parseRoute('#scenario/first-job'), { view: 'lesson', lesson: 'first-job' })
-})
-
-test('module load mutates shell environment without touching Spack and resets cleanly for sbatch', () => {
-  const miss = moduleFrameAt(3000)
-  assert.equal(miss.context, 'login01')
-  assert.equal(miss.loadedModule, null)
-  assert.equal(miss.commandNotFound, true)
-  assert.deepEqual(miss.activeWires, ['login-env', 'env-os'])
-
-  const loading = moduleFrameAt(7000)
-  assert.equal(loading.loadedModule, null)
-  assert.deepEqual(loading.activeWires, ['login-lmod'])
-
-  const loaded = moduleFrameAt(9500)
-  assert.equal(loaded.context, 'login01')
-  assert.equal(loaded.loadedModule, 'cuda/12.8')
-  assert.equal(loaded.activeWires.includes('env-spack'), false)
-
-  const resolved = moduleFrameAt(15000)
-  assert.equal(resolved.resolvedExecutable, true)
-  assert.deepEqual(resolved.activeWires, ['login-env', 'env-spack'])
-
-  const batchSpawned = moduleFrameAt(20000)
-  assert.equal(batchSpawned.context, 'gpu01')
-  assert.equal(batchSpawned.batchStatus, 'starting')
-  assert.equal(batchSpawned.loadedModule, null)
-
-  const batchRunning = moduleFrameAt(24000)
-  assert.equal(batchRunning.context, 'gpu01')
-  assert.equal(batchRunning.batchStatus, 'running')
-  assert.equal(batchRunning.loadedModule, 'cuda/12.8')
-  assert.equal(batchRunning.resolvedExecutable, true)
-
-  const rewound = moduleFrameAt(1000)
-  assert.equal(rewound.context, 'login01')
-  assert.equal(rewound.loadedModule, null)
-  assert.equal(rewound.batchStatus, 'idle')
-})
-
-test('ELK schematic layout produces non-overlapping node bounds and routed paths in wide and compact modes', async () => {
-  const layouts = await computeSchematicLayouts(moduleNodes, moduleWires)
-  for (const mode of ['wide', 'compact'] as const) {
-    const layout = layouts[mode]
-    const entries = Object.entries(layout.nodes)
-    assert.equal(entries.length, moduleNodes.length)
-    for (let i = 0; i < entries.length; i++) {
-      for (let j = i + 1; j < entries.length; j++) {
-        const [, a] = entries[i]!
-        const [, b] = entries[j]!
-        const separated = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y
-        assert.equal(separated, true, `${mode} nodes ${entries[i]![0]} and ${entries[j]![0]} overlapped`)
-      }
-    }
-    for (const wire of moduleWires) {
-      assert.match(layout.wires[wire.id].path, /^M /)
-      assert.ok(layout.wires[wire.id].points.length >= 2)
-    }
-  }
-})
-
-test('GSAP schematic motion sampler scrubs deterministically forward and backward and respects reduced motion', () => {
-  const wireIds = moduleWires.map(wire => wire.id)
-  const nodeIds = moduleNodes.map(node => node.id)
-  const sampler = createMotionSampler(wireIds, nodeIds, moduleMotion)
-  try {
-    const mid = sampler.sample(8500, false)
-    assert.equal(mid.transfers.length, 1)
-    assert.equal(mid.transfers[0]!.id, 'edit-env')
-    assert.ok(mid.transfers[0]!.progress > 0 && mid.transfers[0]!.progress < 1)
-
-    const reduced = sampler.sample(8500, true)
-    assert.equal(reduced.transfers.length, 0)
-    assert.equal(reduced.wireReveal['lmod-env'], 1)
-
-    sampler.sample(24000, false)
-    const rewound = sampler.sample(8500, false)
-    assert.equal(rewound.transfers.length, 1)
-    assert.ok(Math.abs(rewound.transfers[0]!.progress - mid.transfers[0]!.progress) < 1e-6)
-  } finally {
-    sampler.destroy()
-  }
 })
 
 test('think-back trail deduplicates consecutive routes and falls back to owning domain', () => {

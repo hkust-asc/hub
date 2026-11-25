@@ -159,22 +159,6 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .open-scene-button { display: flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%; padding: 11px 13px; border-radius: 0; color: #fff; background: #597ba9; font-size: 11px; margin-top: 20px; }
 .open-scene-button:hover { background: #496b99; }
 .open-scene-button svg { width: 14px; height: 14px; }
-.lesson-player { padding: 18px 22px 20px; border-top: 1px solid var(--line); background: #fff; }
-.player-heading { display: flex; align-items: center; gap: 15px; }
-.scenario-transport { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.play-button { width: 34px; height: 34px; padding: 0; border-radius: 0; background: #526b85; color: #fff; display: grid; place-items: center; }
-.play-button:hover { background: #3d5772; }
-.play-button svg { width: 15px; height: 15px; }
-.player-identity { min-width: 0; }
-.player-identity h2 { color: #60758a; font-size: 11px; font-weight: 500; line-height: 1.5; }
-#step-count { color: #9aa6b0; font: 8px/1.8 var(--mono); }
-.player-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
-.step-range { appearance: none; display: block; width: 100%; height: 3px; border-radius: 0; background: linear-gradient(to right, #d78574 var(--progress, 0%), #e8edf1 var(--progress, 0%)); margin: 16px 0 18px; cursor: pointer; }
-.step-range::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; border-radius: 0; background: #c98170; }
-.step-range::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 0; background: #c98170; }
-.step-copy h3 { font-size: 13px; font-weight: 500; color: #536573; line-height: 1.5; }
-.step-copy p { font-size: 11px; line-height: 1.85; color: #8a98a3; margin-top: 7px; }
-#step-command { display: block; margin-top: 11px; padding: 6px 9px; border-left: 2px solid #bdcbc7; font: 10px/1.7 var(--mono); color: #6f8b7c; background: #f1f5f2; overflow-wrap: anywhere; }
 .section-kicker { font: 9px var(--mono); color: #87919a; }
 .solid { stroke: #35483d25; }
 .board-trace { stroke: #9db5a6; fill: none; stroke-width: 1.5; opacity: .65; }
@@ -212,13 +196,6 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .transfer-flow.is-reversed { animation-direction: reverse; }
 .bus-hit { stroke: transparent; stroke-width: 19; fill: none; cursor: pointer; }
 .bus-target.is-selected .bus-hit, .bus-target:focus-visible .bus-hit { stroke: #d7584625; }
-.buffer-markers, .allocation-label { display: none; }
-.allocation-label rect { fill: #edf2fc; stroke: #ccd9ef; }
-.allocation-label text { fill: #5979b6; font: 9px var(--mono); }
-.is-allocated .allocation-label { display: block; }
-.is-allocated .gpu-0 { filter: drop-shadow(0 0 5px #527fc570); }
-.is-allocated .gpu-unit:not(.gpu-0) { opacity: .5; }
-.is-computing .gpu-0 .device-led { fill: #d75846; animation: computing 1.2s ease-in-out infinite; }
 dialog { border: 1px solid #dbe1e7; border-radius: 0; padding: 26px 30px 30px; width: 510px; max-width: calc(100% - 32px); max-height: calc(100dvh - 48px); color: var(--ink); box-shadow: 0 24px 100px #15243424; }
 dialog::backdrop { background: #26323e55; backdrop-filter: blur(3px); }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -469,17 +446,6 @@ dialog h3 { font-size: 12px; font-weight: 500; margin-top: 24px; }
   .topic-properties > div { font-size: 11px; }
   .subject-notes summary { font-size: 12px; }
   .subject-notes > p { font-size: 12px; }
-  .lesson-player { padding: 16px 15px 19px; }
-  .player-heading { gap: 8px; }
-  .scenario-transport { gap: 0; }
-  .scenario-transport .icon-button { width: 26px; }
-  .play-button { width: 30px; height: 30px; }
-  .player-identity h2 { font-size: 10px; }
-  #step-count { font-size: 7px; }
-  .player-actions { gap: 0; }
-  .player-actions .icon-button { width: 26px; }
-  .step-copy h3 { font-size: 13px; }
-  .step-copy p { font-size: 12px; }
   .workspace-heading { flex-direction: column; align-items: flex-start; gap: 12px; }
   .heading-aside { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; }
   .atlas-toolbar { padding: 8px 12px; }

@@ -46,6 +46,31 @@ test('finishing a lesson publishes the completed bookmark without waiting for th
   assert.ok(new LearningProgress(disk).lessons.get('streams')?.completed)
 })
 
+test('step bookmarks map legacy millisecond records proportionally and restart completed lessons cleanly', async () => {
+  const { resolveSavedStep, stepBookmarkPosition } = await import('../src/platform/progress.ts')
+  // Legacy 4-beat streams bookmark mid-way -> maps cleanly into 5-step lesson
+  assert.equal(
+    resolveSavedStep({ positionMs: 12500, durationMs: 24500, beat: 2, total: 4, completed: false }, 5),
+    2,
+  )
+  // Exact matching step count uses saved beat index directly
+  assert.equal(
+    resolveSavedStep({ positionMs: 3000, durationMs: 5000, beat: 3, total: 5, completed: false }, 5),
+    3,
+  )
+  // Completed lesson at end starts fresh at step 0 on reopen
+  assert.equal(
+    resolveSavedStep({ positionMs: 5000, durationMs: 5000, beat: 4, total: 5, completed: true }, 5),
+    0,
+  )
+  assert.deepEqual(stepBookmarkPosition(4, 5, true), {
+    positionMs: 5000,
+    durationMs: 5000,
+    beat: 4,
+    total: 5,
+  })
+})
+
 test('search distinguishes the stdout walkthrough, the simulation and the reference; planned items have no jump target', async () => {
   const { searchDestinations } = await import('../src/platform/search.ts')
   const routes = searchDestinations('streams').map(item => item.route)

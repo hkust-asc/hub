@@ -1,9 +1,7 @@
 export type TopicId = 'gpu' | 'cpu' | 'memory' | 'pcie' | 'numa' | 'nic' | 'slurm'
 export type Placement = 'local' | 'remote'
-export type Mode = 'explore' | 'scenario'
 export type LinkId = 'memory-local' | 'memory-remote' | 'socket-link' | 'pcie-link' | 'gpu-link'
 export type SceneId = 'cluster' | 'a30'
-export type ScenarioId = 'gpu-copy' | 'first-job'
 export type ClusterTopicId = 'login' | 'cpu-nodes' | 'a30' | 'rtx4090d' | 'other-gpus' | 'fabric' | 'storage' | 'slurm' | 'lmod' | 'spack'
 
 export interface ClusterTopic {
@@ -172,164 +170,53 @@ export const topics: Record<TopicId, Topic> = {
   },
 }
 
-export const stages = [
-  {
-    label: 'Allocate',
-    title: 'A job receives its resources.',
-    description: 'Slurm grants this example job access to GPU 0 and CPU resources. The other GPUs are not part of this example allocation.',
-    topic: 'slurm',
-    location: 'Slurm allocation',
-  },
-  {
-    label: 'Prepare',
-    title: 'The input starts in host memory.',
-    description: 'The CPU prepares an input buffer in host RAM. The placement control chooses a local or cross-socket arrangement for this illustrative example.',
-    topic: 'memory',
-    location: 'Host RAM',
-  },
-  {
-    label: 'Copy in',
-    title: 'Input crosses into GPU memory.',
-    description: 'An explicit host-to-device (H2D) copy transfers the buffer over the PCIe path. Remote placement adds an inter-socket crossing in this schematic.',
-    topic: 'pcie',
-    location: 'Host to device / H2D',
-  },
-  {
-    label: 'Compute',
-    title: 'A CUDA kernel runs on the GPU.',
-    description: 'The GPU operates on data already in device memory. No host-to-device transfer is shown during this deliberately simple, non-overlapped compute step.',
-    topic: 'gpu',
-    location: 'GPU 0 / device memory',
-  },
-  {
-    label: 'Copy out',
-    title: 'The result returns to the host.',
-    description: 'A device-to-host (D2H) copy brings the result back over the same illustrative path, in the opposite direction.',
-    topic: 'pcie',
-    location: 'Device to host / D2H',
-  },
-  {
-    label: 'Finish',
-    title: 'The job releases its allocation.',
-    description: 'The result is now in host memory. The program exits and Slurm releases its resources. Writing results to shared storage is outside this example.',
-    topic: 'slurm',
-    location: 'Result in host RAM',
-  },
-] as const
-
-export interface ScenarioStep {
-  label: string
-  title: string
-  description: string
-  topic: TopicId
-  location: string
-  scene: SceneId
-  clusterTopic: ClusterTopicId
-  nodeStep?: number
-  command?: string
-}
-
-export const gpuSteps: readonly ScenarioStep[] = stages.map((stage, nodeStep) => ({ ...stage, scene: 'a30', clusterTopic: 'a30', nodeStep }))
-
-export const jobSteps: readonly ScenarioStep[] = [
-  { label: 'Connect', title: 'Your shell starts on a login node.', description: 'SSH gives you a shell on the shared login system. The scientific computation will run somewhere else, after a compute allocation is granted.', topic: 'cpu', location: 'Login shell', scene: 'cluster', clusterTopic: 'login', command: 'ssh <username>@hpc4.ust.hk' },
-  { label: 'Environment', title: 'Select software, not a different machine.', description: 'Lmod makes an existing software installation available to a shell. Spack may have built that installation earlier. The batch script must establish or inherit the environment it needs.', topic: 'cpu', location: 'Shell environment', scene: 'cluster', clusterTopic: 'lmod', command: 'module load <installed-module>' },
-  { label: 'Submit', title: 'Send a job description to Slurm.', description: 'The batch script describes resources and commands. sbatch returns a job ID; your existing terminal remains on the login node. Waiting is compressed in this educational scenario.', topic: 'slurm', location: 'Submitted / pending', scene: 'cluster', clusterTopic: 'slurm', command: 'sbatch gpu-job.sh' },
-  { label: 'Allocate', title: 'Eligible compute resources are assigned.', description: 'This example job receives access to GPU 0 on an A30 node and host CPU resources. This is a logical allocation, not a physical data route through the scheduler.', topic: 'slurm', location: 'A30 node / allocation', scene: 'cluster', clusterTopic: 'a30' },
-  ...gpuSteps.slice(1, 5),
-  { label: 'Save', title: 'The program writes its result to shared storage.', description: 'After the D2H copy, the result is in host RAM. The program now writes a file to a chosen shared path. Storage-network wiring and file-transfer timing are not modeled.', topic: 'memory', location: 'Shared output file', scene: 'cluster', clusterTopic: 'storage' },
-  { label: 'Release', title: 'The batch job ends; the file remains.', description: 'Slurm releases the allocation when the job exits. The output file remains subject to its storage location\'s retention and backup policy. The original login shell was never moved to the compute node.', topic: 'slurm', location: 'Completed / resources released', scene: 'cluster', clusterTopic: 'storage', command: 'sacct -j <jobid>' },
-]
-
-export const scenarios = {
-  'gpu-copy': { name: 'Host to GPU', question: 'Where does GPU input travel?', steps: gpuSteps },
-  'first-job': { name: 'A job through HPC4', question: 'Where does a batch job actually run?', steps: jobSteps },
-} as const
-
 export interface AppState {
-  mode: Mode
   selected: TopicId
   scene: SceneId
   clusterSelected: ClusterTopicId
-  scenario: ScenarioId
-  step: number
   placement: Placement
   exploded: boolean
-  playing: boolean
 }
 
 export type Action =
   | { type: 'select'; topic: TopicId }
-  | { type: 'mode'; mode: Mode }
   | { type: 'navigate'; scene: SceneId }
   | { type: 'browse'; scene: 'cluster'; topic?: ClusterTopicId }
   | { type: 'browse'; scene: 'a30'; topic?: TopicId }
   | { type: 'cluster-select'; topic: ClusterTopicId }
-  | { type: 'start-scenario'; scenario: ScenarioId }
-  | { type: 'step'; step: number }
   | { type: 'placement'; placement: Placement }
   | { type: 'explode' }
-  | { type: 'play' }
-  | { type: 'tick' }
   | { type: 'reset-view' }
   | { type: 'reset' }
 
 export const initialState: AppState = {
-  mode: 'explore',
   selected: 'gpu',
   scene: 'cluster',
   clusterSelected: 'a30',
-  scenario: 'gpu-copy',
-  step: 0,
   placement: 'local',
   exploded: false,
-  playing: false,
-}
-
-function atStep(state: AppState, step: number): AppState {
-  const scenarioSteps = scenarios[state.scenario].steps
-  const boundedStep = Math.max(0, Math.min(scenarioSteps.length - 1, step))
-  const activeStep = scenarioSteps[boundedStep]!
-  return { ...state, step: boundedStep, selected: activeStep.topic, scene: activeStep.scene, clusterSelected: activeStep.clusterTopic }
 }
 
 export function updateState(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'select':
-      return { ...state, selected: action.topic, playing: false }
+      return { ...state, selected: action.topic }
     case 'navigate':
-      return { ...state, scene: action.scene, mode: 'explore', playing: false }
+      return { ...state, scene: action.scene }
     case 'browse':
       return action.scene === 'cluster'
-        ? { ...state, scene: 'cluster', clusterSelected: action.topic ?? 'a30', mode: 'explore', playing: false }
-        : { ...state, scene: 'a30', selected: action.topic ?? state.selected, mode: 'explore', playing: false }
+        ? { ...state, scene: 'cluster', clusterSelected: action.topic ?? 'a30' }
+        : { ...state, scene: 'a30', selected: action.topic ?? state.selected }
     case 'cluster-select':
-      return { ...state, clusterSelected: action.topic, playing: false }
-    case 'start-scenario':
-      return atStep({ ...state, scenario: action.scenario, mode: 'scenario', playing: false }, 0)
-    case 'mode':
-      return action.mode === 'scenario'
-        ? atStep({ ...state, mode: action.mode, playing: false }, state.step)
-        : { ...state, mode: action.mode, playing: false }
-    case 'step':
-      return atStep({ ...state, mode: 'scenario', playing: false }, action.step)
+      return { ...state, clusterSelected: action.topic }
     case 'placement':
       return { ...state, placement: action.placement }
     case 'explode':
       return { ...state, exploded: !state.exploded }
-    case 'play':
-      if (state.playing) return { ...state, playing: false }
-      return atStep({ ...state, mode: 'scenario', playing: true }, state.step === scenarios[state.scenario].steps.length - 1 ? 0 : state.step)
-    case 'tick':
-      if (!state.playing) return state
-      if (state.step === scenarios[state.scenario].steps.length - 1) return { ...state, playing: false }
-      return atStep(state, state.step + 1)
     case 'reset-view':
       return { ...state, placement: 'local', exploded: false }
     case 'reset':
-      return state.mode === 'scenario'
-        ? atStep({ ...initialState, mode: 'scenario', scenario: state.scenario }, 0)
-        : { ...initialState, scene: state.scene }
+      return { ...initialState, scene: state.scene }
   }
 }
 

@@ -1,42 +1,20 @@
+import { createIsoProjector } from './iso'
+import type { IsoPaletteName } from './iso'
+
 export type Tone = 'blue' | 'green' | 'amber' | 'slate' | 'coral'
 
-type IsoShade = readonly [top: string, front: string, side: string]
+const glyphIso = createIsoProjector({ originX: 24, originY: 18.5, scale: 0.86, roundTo: 10 })
 
-const shades: Record<string, IsoShade> = {
-  board: ['#e6eee9', '#cad8d1', '#b4c6bd'],
-  frame: ['#e6eaee', '#cbd2d9', '#b1bac3'],
-  blue: ['#dae4f7', '#7b97cf', '#5875ae'],
-  blueDeep: ['#adc2ea', '#5c7ab8', '#466199'],
-  amber: ['#f5dec3', '#d59d62', '#b07b43'],
-  amberDeep: ['#e9c59b', '#be8448', '#986734'],
-  green: ['#cce6dd', '#66a090', '#447c6d'],
-  greenDeep: ['#9ecbc0', '#488373', '#356558'],
-  slate: ['#dde3e9', '#94a4b3', '#738596'],
-  chip: ['#4d6468', '#364b4e', '#28393c'],
-  coral: ['#fad5cd', '#dd7462', '#b95545'],
-}
-
-function iso(x: number, y: number, z: number): [number, number] {
-  return [
-    Math.round((24 + (x - y) * 0.86) * 10) / 10,
-    Math.round((18.5 + (x + y) * 0.43 - z) * 10) / 10,
-  ]
-}
-
-function poly(pts: [number, number][], fill: string): string {
-  return `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${fill}"/>`
-}
-
-function box(x: number, y: number, z: number, w: number, d: number, h: number, shade: keyof typeof shades): string {
-  const [top, front, side] = shades[shade]!
-  const tl = iso(x, y, z + h)
-  const tr = iso(x + w, y, z + h)
-  const br = iso(x + w, y + d, z + h)
-  const bl = iso(x, y + d, z + h)
-  const fbl = iso(x, y + d, z)
-  const fbr = iso(x + w, y + d, z)
-  const sbr = iso(x + w, y, z)
-  return `<g stroke="#2c3e4526" stroke-width="0.75" stroke-linejoin="round">${poly([bl, br, fbr, fbl], front)}${poly([tr, br, fbr, sbr], side)}${poly([tl, tr, br, bl], top)}</g>`
+function box(
+  x: number,
+  y: number,
+  z: number,
+  w: number,
+  d: number,
+  h: number,
+  shade: IsoPaletteName,
+): string {
+  return glyphIso.box(x, y, z, w, d, h, shade, { stroke: '#2c3e4526', strokeWidth: 0.75 })
 }
 
 function wrap(inner: string): string {

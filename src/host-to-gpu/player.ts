@@ -1,195 +1,238 @@
-import { copyPath, evidence, topics } from '../model'
-import type { LinkId, Placement } from '../model'
-import { createScene } from '../scene'
-import type { LessonOptions, LessonScene } from '../timed-lesson/player'
-import { frameAt, timeline } from './story'
-import type { Anchor } from './story'
-import './player.css'
+import { copyPath, evidence, topics } from '../model.ts'
+import type { LinkId, Placement } from '../model.ts'
+import { a30TokenAnchors, createScene } from '../scene.ts'
+import { createIsoStageScene } from '../stage/iso-scene.ts'
+import type { SvgTokenPill } from '../stage/iso-scene.ts'
+import type { StageScenarioOptions } from '../stage/types.ts'
+import { evaluateGpuStep, gpuSteps } from './story.ts'
+import type { GpuFocusPart } from './story.ts'
 
-function createGpuScene(stage: HTMLElement, pause: () => void): LessonScene {
-  stage.classList.add('gpu-lesson-stage')
-  stage.innerHTML = `${createScene()}
-    <span class="gpu-lesson-token" data-memory="host" hidden></span>
-    <span class="gpu-lesson-token" data-memory="device" hidden></span>`
-  const art = stage.querySelector<SVGSVGElement>('.node-diagram')!
-  art.classList.add('story-art')
-  art.setAttribute('viewBox', '-10 83 895 489')
-  art.setAttribute('role', 'group')
-  art.querySelector('desc')!.textContent = 'Illustrative A30 node cutaway. Select Inspect to see the names and roles of individual components.'
-
-  const overlay = document.createElementNS(art.namespaceURI, 'g')
-  overlay.setAttribute('aria-hidden', 'true')
-  overlay.innerHTML = `
-    <path class="gpu-lesson-signal" hidden />
-    <path class="gpu-lesson-arrow" d="M -6 -5 L 3 0 L -6 5" hidden />
-    <circle class="gpu-lesson-packet" r="6" hidden />
-    <circle class="gpu-lesson-pulse" r="4" hidden />`
-  art.append(overlay)
-  const signal = overlay.querySelector<SVGPathElement>('.gpu-lesson-signal')!
-  const arrow = overlay.querySelector<SVGPathElement>('.gpu-lesson-arrow')!
-  const packet = overlay.querySelector<SVGCircleElement>('.gpu-lesson-packet')!
-  const pulse = overlay.querySelector<SVGCircleElement>('.gpu-lesson-pulse')!
-  const gpu = art.querySelector<SVGGElement>('.gpu-0')!
-  const rams = { local: art.querySelector<SVGGElement>('.bank-1')!, remote: art.querySelector<SVGGElement>('.bank-0')! }
-  const cpus = { local: art.querySelector<SVGGElement>('.socket-1')!, remote: art.querySelector<SVGGElement>('.socket-0')! }
-  const hostToken = stage.querySelector<HTMLElement>('[data-memory="host"]')!
-  const deviceToken = stage.querySelector<HTMLElement>('[data-memory="device"]')!
-  const paths = [...art.querySelectorAll<SVGPathElement>('[data-flow]')]
-  const pathFor = (link: LinkId) => {
-    const path = paths.find(element => element.dataset.flow === link)
-    if (!path) throw new Error(`Missing GPU route for ${link}`)
-    return path
-  }
-  const parts = new Map([...art.querySelectorAll<SVGGraphicsElement>('[data-topic]')].map(part => {
-    const topic = part.dataset.topic
-    const label = part.querySelector('title')
-    if (!topic || !Object.hasOwn(topics, topic) || !label?.textContent) throw new Error(`Unknown or unlabeled diagram part: ${topic}`)
-    part.dataset.lessonPart = topic
-    label.remove()
-    const name = topic === 'gpu' ? label.textContent.split(',')[0]! : label.textContent
-    return [part, { name, topic, subject: topics[topic as keyof typeof topics] }] as const
-  }))
-
-  let placement: Placement = 'local'
-  let route: { path: SVGPathElement; length: number }[] = []
-  let routeLength = 0
-  let reversed = false
-  let routeKey = ''
-  let signalKey = ''
-  const alignTokens = () => {
-    const bounds = stage.getBoundingClientRect()
-    for (const [token, target, edge] of [[hostToken, rams[placement], 'top'], [deviceToken, gpu, 'bottom']] as const) {
-      const rect = target.getBoundingClientRect()
-      token.style.left = `${rect.left + rect.width / 2 - bounds.left}px`
-      token.style.top = `${rect[edge] - bounds.top}px`
-    }
-  }
-  const choices = [...stage.closest('main')!.querySelectorAll<HTMLButtonElement>('[data-gpu-placement]')]
-  for (const choice of choices) choice.addEventListener('click', () => {
-    const value = choice.dataset.gpuPlacement
-    if (value !== 'local' && value !== 'remote') throw new Error(`Unknown placement: ${value}`)
-    if (placement === value) return
-    placement = value
-    for (const button of choices) button.setAttribute('aria-pressed', String(button === choice))
-    alignTokens()
-    pause()
-  })
-
-  function routePoint(fraction: number): DOMPoint {
-    let distance = routeLength * fraction
-    for (const [index, segment] of route.entries()) {
-      if (distance <= segment.length || index === route.length - 1) {
-        return segment.path.getPointAtLength(reversed ? segment.length - distance : distance)
-      }
-      distance -= segment.length
-    }
-    throw new Error('No path for the copy operation')
-  }
-
-  function draw(elapsedMs: number, reduced: boolean) {
-    const frame = frameAt(elapsedMs, placement)
-    const targets: Record<Anchor, SVGGraphicsElement> = {
-      gpu, ram: rams[placement], cpu: cpus[placement],
-      'pcie-link': pathFor('pcie-link'), 'socket-link': pathFor('socket-link'),
-    }
-    const focus = frame.focus.map(key => targets[key])
-    art.classList.toggle('gpu-lesson-neutral', frame.focus.length === 0)
-    art.classList.toggle('gpu-lesson-other-dim', frame.allocated)
-    art.classList.toggle('gpu-lesson-kernel', frame.kernel)
-    art.classList.toggle('gpu-lesson-crossing', placement === 'remote' && frame.copy !== null)
-    for (const part of parts.keys()) part.classList.toggle('gpu-lesson-emphasis', focus.includes(part))
-    gpu.style.translate = frame.lift && !reduced ? `0 ${-frame.lift}px` : ''
-
-    for (const [token, value, where] of [[hostToken, frame.host, 'Host RAM'], [deviceToken, frame.device, 'GPU memory']] as const) {
-      token.hidden = value === null
-      if (token.textContent !== (value ?? '')) {
-        token.textContent = value
-        token.setAttribute('aria-label', `${where}: ${value ?? 'empty'}`)
-        token.classList.toggle('gpu-lesson-result', value === 'Result')
-      }
-      token.style.opacity = reduced ? '' : String(frame.tokenOpacity)
-    }
-
-    const key = frame.copy ? `${placement}:${frame.copy.direction}` : ''
-    if (key !== routeKey) {
-      routeKey = key
-      const direction = frame.copy?.direction
-      const links = direction ? copyPath(direction, placement) : []
-      const active = links.map(pathFor)
-      for (const path of paths) path.classList.toggle('gpu-lesson-active', active.includes(path))
-      reversed = direction === 'd2h'
-      art.classList.toggle('gpu-lesson-return', reversed)
-      route = active.map(path => ({ path, length: path.getTotalLength() }))
-      routeLength = route.reduce((length, item) => length + item.length, 0)
-      arrow.toggleAttribute('hidden', !route.length)
-      if (route.length) {
-        const point = routePoint(.66)
-        const ahead = routePoint(.69)
-        const angle = Math.atan2(ahead.y - point.y, ahead.x - point.x) * 180 / Math.PI
-        arrow.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`)
-      }
-    }
-    const progress = frame.copy?.progress
-    const moving = progress !== null && progress !== undefined && !reduced
-    packet.toggleAttribute('hidden', !moving)
-    if (moving) movePoint(packet, routePoint(progress))
-
-    const currentSignal = frame.signal ? `${placement}:${frame.signal.kind}` : ''
-    if (signalKey !== currentSignal) {
-      signalKey = currentSignal
-      signal.toggleAttribute('hidden', !frame.signal)
-      if (frame.signal?.kind === 'prepare') {
-        signal.setAttribute('d', pathFor(placement === 'local' ? 'memory-local' : 'memory-remote').getAttribute('d')!)
-      } else if (frame.signal?.kind === 'launch') {
-        const cpu = cpus[placement].getBBox()
-        const device = gpu.getBBox()
-        signal.setAttribute('d', `M ${cpu.x + cpu.width / 2} ${cpu.y + cpu.height / 2} L ${device.x + device.width / 2} ${device.y + device.height / 2}`)
-      }
-    }
-    pulse.toggleAttribute('hidden', !frame.signal || reduced)
-    if (frame.signal && !reduced) {
-      const distance = frame.signal.kind === 'prepare' ? 1 - frame.signal.progress : frame.signal.progress
-      movePoint(pulse, signal.getPointAtLength(signal.getTotalLength() * distance))
-    }
-
-    return {
-      target: targets[frame.note.anchor], title: frame.note.title, text: frame.note.text,
-      avoid: [
-        ...focus, ...route.map(({ path }) => path), ...(frame.signal ? [signal] : []),
-        ...[hostToken, deviceToken].filter(token => !token.hidden),
-      ],
-    }
-  }
-
-  return {
-    art, draw, resize: alignTokens,
-    describe(part, elapsedMs) {
-      const { name, topic, subject } = parts.get(part)!
-      const { allocated } = frameAt(elapsedMs, placement)
-      const role = topic === 'gpu' ? !allocated ? 'GPU accelerator' : part === gpu ? 'Allocated GPU' : 'Not in this allocation'
-        : topic === 'memory' ? part === rams[placement] ? 'Active host RAM' : 'Other socket’s RAM'
-          : topic === 'cpu' ? part === cpus[placement] ? 'Host CPU' : 'Other CPU socket'
-            : topic === 'pcie' ? 'Host-to-device link'
-              : topic === 'numa' ? 'Inter-socket link' : 'Cluster network interface'
-      return { name, role, detail: subject.takeaway }
-    },
-  }
+function moveCircle(circle: SVGCircleElement, point: DOMPoint): void {
+  circle.setAttribute('cx', String(Math.round(point.x * 10) / 10))
+  circle.setAttribute('cy', String(Math.round(point.y * 10) / 10))
 }
 
-function movePoint(circle: SVGCircleElement, point: DOMPoint): void {
-  circle.setAttribute('cx', String(point.x))
-  circle.setAttribute('cy', String(point.y))
-}
-
-export const lesson: LessonOptions = {
+export const lesson: StageScenarioOptions<Placement> = {
+  id: 'host-to-gpu',
   title: 'Host to GPU',
   subtitle: 'A30 cutaway · Explicit copies',
-  diagramLabel: 'Interactive A30 diagram',
-  timeline,
-  controls: `<div class="gpu-lesson-placement" role="group" aria-label="Host RAM placement">
-    <button type="button" data-gpu-placement="local" aria-pressed="true">Local</button>
-    <button type="button" data-gpu-placement="remote" aria-pressed="false">Cross-socket</button>
-  </div>`,
-  footer: `<p>Illustrative routes and timing</p><a href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">HPC4 specifications</a>`,
-  createScene: createGpuScene,
+  diagramLabel: 'Interactive A30 host-to-GPU transfer cutaway',
+  steps: gpuSteps,
+  variants: {
+    label: 'Host RAM placement',
+    defaultId: 'local',
+    options: [
+      { id: 'local', label: 'Local' },
+      { id: 'remote', label: 'Cross-socket' },
+    ],
+  },
+  footer: {
+    note: 'Illustrative routes and timing',
+    sourceLabel: 'HPC4 specifications',
+    sourceHref: evidence.hardwareSource,
+  },
+  mountScene: canvas =>
+    createIsoStageScene<Placement>(canvas, {
+      id: 'host-to-gpu',
+      baseViewBox: { x: 10, y: 82, w: 860, h: 455 },
+      tokenIds: ['host', 'device'],
+      buildSvg: () => createScene('gpu-stage'),
+      bind(art) {
+        art.setAttribute('role', 'group')
+        art.querySelector('desc')!.textContent =
+          'Illustrative A30 node cutaway. Use Inspect to see the names and roles of individual components.'
+
+        const motionOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+        motionOverlay.setAttribute('aria-hidden', 'true')
+        motionOverlay.innerHTML = `
+          <path class="gpu-stage-signal" hidden />
+          <path class="gpu-stage-arrow" d="M -6 -5 L 3 0 L -6 5" hidden />
+          <circle class="gpu-stage-packet" r="6" hidden />
+          <circle class="gpu-stage-pulse" r="4.5" hidden />`
+        art.append(motionOverlay)
+
+        const signalEl = motionOverlay.querySelector<SVGPathElement>('.gpu-stage-signal')!
+        const arrowEl = motionOverlay.querySelector<SVGPathElement>('.gpu-stage-arrow')!
+        const packetEl = motionOverlay.querySelector<SVGCircleElement>('.gpu-stage-packet')!
+        const pulseEl = motionOverlay.querySelector<SVGCircleElement>('.gpu-stage-pulse')!
+
+        const gpu0 = art.querySelector<SVGGElement>('.gpu-0')!
+        const rams = {
+          local: art.querySelector<SVGGElement>('.bank-1')!,
+          remote: art.querySelector<SVGGElement>('.bank-0')!,
+        }
+        const cpus = {
+          local: art.querySelector<SVGGElement>('.socket-1')!,
+          remote: art.querySelector<SVGGElement>('.socket-0')!,
+        }
+        const flowPaths = [...art.querySelectorAll<SVGPathElement>('[data-flow]')]
+        const pathFor = (link: LinkId) => {
+          const found = flowPaths.find(el => el.dataset.flow === link)
+          if (!found) throw new Error(`Missing GPU route for ${link}`)
+          return found
+        }
+
+        const partMeta = new Map(
+          [...art.querySelectorAll<SVGGraphicsElement>('[data-topic]')].map(el => {
+            const topic = el.dataset.topic!
+            const titleEl = el.querySelector('title')
+            const rawLabel = titleEl?.textContent ?? topics[topic as keyof typeof topics].name
+            titleEl?.remove()
+            el.dataset.stagePart = topic
+            el.setAttribute('tabindex', '-1')
+            const name = topic === 'gpu' ? rawLabel.split(',')[0]! : rawLabel
+            return [el, { name, topic, subject: topics[topic as keyof typeof topics] }] as const
+          }),
+        )
+
+        let routeKey = ''
+        let routeSegments: { path: SVGPathElement; length: number }[] = []
+        let routeTotalLen = 0
+        let reversed = false
+        let signalKey = ''
+
+        function routePoint(fraction: number): DOMPoint {
+          let dist = routeTotalLen * Math.max(0, Math.min(1, fraction))
+          for (const [idx, seg] of routeSegments.entries()) {
+            if (dist <= seg.length || idx === routeSegments.length - 1) {
+              return seg.path.getPointAtLength(reversed ? seg.length - dist : dist)
+            }
+            dist -= seg.length
+          }
+          return new DOMPoint(0, 0)
+        }
+
+        return {
+          applyFrame({ stepIndex, beatProgress, variant, reducedMotion }) {
+            const frame = evaluateGpuStep(stepIndex, beatProgress, variant)
+            const focusTargets: Record<GpuFocusPart, SVGGraphicsElement> = {
+              gpu: gpu0,
+              ram: rams[variant],
+              cpu: cpus[variant],
+            }
+            const focusedEls = frame.focus.map(k => focusTargets[k])
+
+            art.dataset.dimUnfocused = String(frame.focus.length > 0)
+            art.dataset.allocated = String(frame.allocated)
+            art.dataset.kernel = String(frame.kernel)
+            art.dataset.crossing = String(variant === 'remote' && frame.copy !== null)
+            art.dataset.direction = frame.copy?.direction ?? 'h2d'
+
+            for (const el of partMeta.keys()) {
+              el.classList.toggle('st-iso-focus', focusedEls.includes(el))
+            }
+            gpu0.style.transform = frame.lift && !reducedMotion ? `translateY(${-frame.lift}px)` : ''
+
+            const nextRouteKey = frame.copy ? `${variant}:${frame.copy.direction}` : ''
+            if (nextRouteKey !== routeKey) {
+              routeKey = nextRouteKey
+              const dir = frame.copy?.direction
+              const activeLinks = dir ? copyPath(dir, variant) : []
+              const activeEls = activeLinks.map(pathFor)
+              for (const p of flowPaths) p.classList.toggle('st-iso-route', activeEls.includes(p))
+              reversed = dir === 'd2h'
+              routeSegments = activeEls.map(path => ({ path, length: path.getTotalLength() }))
+              routeTotalLen = routeSegments.reduce((sum, seg) => sum + seg.length, 0)
+              arrowEl.toggleAttribute('hidden', routeSegments.length === 0)
+              if (routeSegments.length > 0) {
+                const pt = routePoint(0.66)
+                const ahead = routePoint(0.69)
+                const angle = (Math.atan2(ahead.y - pt.y, ahead.x - pt.x) * 180) / Math.PI
+                arrowEl.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(${angle})`)
+              }
+            }
+
+            const copyProg = frame.copy?.progress
+            const showPacket = copyProg !== null && copyProg !== undefined && !reducedMotion
+            packetEl.toggleAttribute('hidden', !showPacket)
+            if (showPacket) moveCircle(packetEl, routePoint(copyProg))
+
+            const nextSigKey = frame.signal ? `${variant}:${frame.signal.kind}` : ''
+            if (nextSigKey !== signalKey) {
+              signalKey = nextSigKey
+              signalEl.toggleAttribute('hidden', !frame.signal)
+              if (frame.signal?.kind === 'prepare') {
+                signalEl.setAttribute('d', pathFor(variant === 'local' ? 'memory-local' : 'memory-remote').getAttribute('d')!)
+              } else if (frame.signal?.kind === 'launch') {
+                const cpuBox = cpus[variant].getBBox()
+                const devBox = gpu0.getBBox()
+                signalEl.setAttribute(
+                  'd',
+                  `M ${cpuBox.x + cpuBox.width / 2} ${cpuBox.y + cpuBox.height / 2} L ${devBox.x + devBox.width / 2} ${devBox.y + devBox.height / 2}`,
+                )
+              }
+            }
+
+            const showPulse = Boolean(frame.signal) && !reducedMotion
+            pulseEl.toggleAttribute('hidden', !showPulse)
+            if (frame.signal && showPulse) {
+              const dist = frame.signal.kind === 'prepare' ? 1 - frame.signal.progress : frame.signal.progress
+              moveCircle(pulseEl, signalEl.getPointAtLength(signalEl.getTotalLength() * dist))
+            }
+
+            const tokens: SvgTokenPill[] = []
+            if (frame.host) {
+              const [hx, hy] = variant === 'local' ? a30TokenAnchors.hostLocal : a30TokenAnchors.hostRemote
+              tokens.push({
+                id: 'host',
+                x: hx,
+                y: hy,
+                label: `RAM · ${frame.host}`,
+                tone: frame.host === 'Result' ? 'green' : 'amber',
+                opacity: frame.tokenOpacity,
+              })
+            }
+            if (frame.device) {
+              const [dx, dy] = a30TokenAnchors.device
+              tokens.push({
+                id: 'device',
+                x: dx,
+                y: dy,
+                label: `HBM2 · ${frame.device}`,
+                tone: frame.device === 'Result' ? 'green' : 'blue',
+                opacity: frame.tokenOpacity,
+              })
+            }
+
+            return {
+              eyebrow: frame.eyebrow,
+              title: frame.title,
+              body: frame.body,
+              panel: frame.panel,
+              changes: frame.changes,
+              hud: frame.hud,
+              viewBox: frame.viewBox,
+              tokens,
+            }
+          },
+          describePart(element, stepIndex, variant) {
+            const meta = partMeta.get(element)
+            if (!meta) return null
+            const { name, topic, subject } = meta
+            const frame = evaluateGpuStep(stepIndex, 1, variant)
+            const role = topic === 'gpu'
+              ? !frame.allocated
+                ? 'GPU accelerator'
+                : element === gpu0
+                  ? 'Allocated GPU (#0)'
+                  : 'Outside this 1-GPU allocation'
+              : topic === 'memory'
+                ? element === rams[variant]
+                  ? 'Active host DDR5 RAM'
+                  : 'Other socket’s DDR5 RAM'
+                : topic === 'cpu'
+                  ? element === cpus[variant]
+                    ? 'Active host CPU socket'
+                    : 'Other CPU socket'
+                  : topic === 'pcie'
+                    ? 'Host-to-device PCIe path'
+                    : topic === 'numa'
+                      ? 'Inter-socket NUMA link'
+                      : 'Cluster RoCE network interface'
+            return { name, role, detail: subject.takeaway }
+          },
+        }
+      },
+    }),
 }
+

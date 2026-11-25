@@ -26,7 +26,7 @@ function learn(progress: LearningProgress) {
         const id = e.id as LessonId
         const saved = progress.lessons.get(id)
         const status = saved
-          ? `<span class="status-pill${saved.completed ? ' is-done' : ''}">${saved.completed ? 'Completed ✓' : `Beat ${saved.beat + 1}`}</span>`
+          ? `<span class="status-pill${saved.completed ? ' is-done' : ''}">${saved.completed ? 'Completed ✓' : `Step ${saved.beat + 1}`}</span>`
           : ''
         return `<article class="mode-card" data-tone="${e.tone}"${saved?.completed ? ' data-status="complete"' : ''}>
           <div class="mode-card-top"><span class="mode-meta">${esc(e.formatLabel)}</span>${status}</div>

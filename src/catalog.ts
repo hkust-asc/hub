@@ -1,5 +1,5 @@
 import type { Tone } from './glyphs'
-import type { ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
+import type { ClusterTopicId, SceneId, TopicId } from './model'
 import { missionLessons, weeks } from './platform/curriculum.ts'
 import { codex } from './platform/codex.ts'
 
@@ -11,7 +11,6 @@ export type EvidenceBasis = 'published' | 'illustrative' | 'workshop'
 export type EntryTarget =
   | { type: 'concept'; id: string }
   | { type: 'scene'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId }
-  | { type: 'scenario'; scenario: ScenarioId }
   | { type: 'lesson'; lesson: LessonId }
   | { type: 'planned' }
 
@@ -60,8 +59,8 @@ export type ParsedRoute =
   | { view: 'concept'; id: string }
   | { view: 'atlas'; mode: 'all' | 'domains' }
   | { view: 'hub'; category: CategoryId }
-  | { view: 'workbench'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId; scenario?: ScenarioId }
-  | { view: 'lesson'; lesson: LessonId }
+  | { view: 'workbench'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId }
+  | { view: 'lesson'; lesson: LessonId; step?: number }
 
 export const categories: readonly CategoryDef[] = [
   {
@@ -428,7 +427,7 @@ const architectureEntries: readonly EntryDef[] = [
     glyph: 'first-job',
     question: 'Where does a submitted batch job actually execute and write output?',
     summary: 'Follows sbatch from login01 through Slurm queuing, Lmod setup on gpu01, and shared /scratch output.',
-    formatLabel: 'Timed Scenario · 5 beats · 55s',
+    formatLabel: 'Guided Scenario · 5 steps',
     segments: 5,
     evidenceBasis: 'illustrative',
     evidenceLabel: 'HPC4 batch workflow · Schematic links',
@@ -445,9 +444,9 @@ const architectureEntries: readonly EntryDef[] = [
     tone: 'green',
     glyph: 'lmod',
     question: 'Why wasn’t the compiler found before `module load`, and what happens in sbatch?',
-    summary: 'Follows PATH and CUDA_HOME across Lmod modulefiles, Spack prefixes, and Slurm batch shells.',
-    formatLabel: 'Timed Scenario · 4 beats · 51s',
-    segments: 4,
+    summary: 'Follows PATH and CUDA_HOME across Lmod modulefiles, Spack prefixes, version switches, and Slurm batch shells.',
+    formatLabel: 'Guided Scenario · 5 steps',
+    segments: 5,
     evidenceBasis: 'illustrative',
     evidenceLabel: 'Tier 2 Spack / Lmod stack · Illustrative paths',
     keywords: 'lmod module load avail switch purge path cuda_home spack batch environment',
@@ -483,7 +482,7 @@ const architectureEntries: readonly EntryDef[] = [
     glyph: 'linux-fs',
     question: 'How do relative paths, dotfiles, and shared storage fit inside one `/` tree?',
     summary: 'Follows pwd, ls -a, relative vs. absolute resolution, and local vs. shared mount points.',
-    formatLabel: 'Timed Scenario · 5 beats · 49s',
+    formatLabel: 'Guided Scenario · 5 steps',
     segments: 5,
     evidenceBasis: 'workshop',
     evidenceLabel: 'ASC Week 1 · Quest 1',
@@ -500,9 +499,9 @@ const architectureEntries: readonly EntryDef[] = [
     tone: 'green',
     glyph: 'streams',
     question: 'Why do error messages still print on screen after `> passcode.txt`?',
-    summary: 'Routes port 1 (stdout) and port 2 (stderr) through > and 2> with an interactive prediction beat.',
-    formatLabel: 'Timed Scenario · 4 beats · 49s',
-    segments: 4,
+    summary: 'Routes port 1 (stdout) and port 2 (stderr) through > and 2> with an explicit prediction step.',
+    formatLabel: 'Guided Scenario · 5 steps',
+    segments: 5,
     evidenceBasis: 'workshop',
     evidenceLabel: 'ASC Week 1 · Quest 2',
     keywords: 'streams redirection stdout stderr 1> 2> noisy_sensor',
@@ -519,7 +518,7 @@ const architectureEntries: readonly EntryDef[] = [
     glyph: 'ssh-tmux',
     question: 'Why does a dropped SSH link stop a plain command, while tmux keeps it running?',
     summary: 'Contrasts losing a foreground SSH shell against detaching and reattaching a tmux session.',
-    formatLabel: 'Timed Scenario · 5 beats · 50s',
+    formatLabel: 'Guided Scenario · 5 steps',
     segments: 5,
     evidenceBasis: 'workshop',
     evidenceLabel: 'ASC Week 1 · Quest 2',
@@ -590,7 +589,7 @@ const architectureEntries: readonly EntryDef[] = [
     glyph: 'host-to-gpu',
     question: 'Why doesn’t allocating a GPU automatically move your input or return the result?',
     summary: 'Follows Input and Result tokens across DDR5, PCIe, and GPU 0 with Local vs. Cross-socket comparison.',
-    formatLabel: 'Timed Scenario · 6 beats · 62s',
+    formatLabel: 'Guided Scenario · 6 steps',
     segments: 6,
     evidenceBasis: 'illustrative',
     evidenceLabel: 'Published A30 counts · Illustrative bus',
@@ -710,8 +709,6 @@ export function routeForTarget(target: EntryTarget): string | null {
       return null
     case 'lesson':
       return `#lesson/${target.lesson}`
-    case 'scenario':
-      return target.scenario === 'gpu-copy' ? '#lesson/host-to-gpu' : '#lesson/first-job'
     case 'scene':
       if (target.scene === 'a30') {
         return !target.nodeTopic || target.nodeTopic === 'gpu' ? '#a30' : `#a30/${target.nodeTopic}`
@@ -758,7 +755,10 @@ export function parseRoute(hash: string): ParsedRoute {
     if (isCategoryId(tail)) return { view: 'hub', category: tail }
     return { view: 'atlas', mode: 'all' }
   }
-  if (head === 'lesson' && isLessonId(tail)) return { view: 'lesson', lesson: tail }
+  if (head === 'lesson' && isLessonId(tail)) {
+    const parsedStep = id && /^[1-9]\d*$/.test(id) ? Number(id) : undefined
+    return parsedStep ? { view: 'lesson', lesson: tail, step: parsedStep } : { view: 'lesson', lesson: tail }
+  }
   if (head === 'scenario') {
     if (tail === 'gpu-copy') return { view: 'lesson', lesson: 'host-to-gpu' }
     if (tail === 'first-job') return { view: 'lesson', lesson: 'first-job' }
@@ -774,14 +774,11 @@ export function parseRoute(hash: string): ParsedRoute {
 
 export function activeEntryForState(
   route: ParsedRoute,
-  sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
+  sceneState: { scene: SceneId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): EntryDef | undefined {
   if (route.view === 'lesson') return entryMap.get(route.lesson)
   if (route.view === 'concept') return entryMap.get(route.id)
   if (route.view !== 'workbench') return undefined
-  if (sceneState.mode === 'scenario') {
-    return sceneState.scenario === 'first-job' ? entryMap.get('first-job') : entryMap.get('host-to-gpu')
-  }
   if (sceneState.scene === 'a30') {
     const map: Record<TopicId, string> = {
       gpu: 'a30-node',
@@ -812,7 +809,7 @@ export function activeEntryForState(
 export function trailSnapshotForCurrent(
   route: ParsedRoute,
   currentHash: string,
-  sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
+  sceneState: { scene: SceneId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): TrailItem {
   if (route.view === 'learn') return { route: '#learn', label: 'Learn', glyph: 'host-to-gpu', tone: 'blue' }
   if (route.view === 'practice') return route.mission
@@ -839,7 +836,7 @@ export function trailSnapshotForCurrent(
 
 export function fallbackBackTarget(
   route: ParsedRoute,
-  sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
+  sceneState: { scene: SceneId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): TrailItem | null {
   if (route.view === 'learn') return null
   if (route.view === 'practice') return route.mission ? { route: '#practice', label: 'Practice', glyph: 'linux-fs', tone: 'green' } : null

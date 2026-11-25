@@ -4,7 +4,7 @@ import '@fontsource/ibm-plex-sans/600.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
 import './platform/platform.css'
-import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
+import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
   entriesForCategory,
@@ -23,17 +23,18 @@ import type { CategoryId, EntryDef, LessonId, ParsedRoute, TrailItem } from './c
 import { renderGlyph } from './glyphs'
 import type { Tone } from './glyphs'
 import { createLayout, icon, renderAtlasBody, renderHubView } from './layout'
-import { clusterTopics, initialState, scenarios, topics, transferPath, updateState } from './model'
-import type { Action, AppState, ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
-import { mountLesson } from './timed-lesson/player'
-import type { LessonOptions, MountedLesson } from './timed-lesson/player'
-import { browserStorage, LearningProgress } from './platform/progress'
+import { clusterTopics, copyPath, initialState, topics, updateState } from './model'
+import type { Action, AppState, ClusterTopicId, SceneId, TopicId } from './model'
+import { mountStageScenario } from './stage/player'
+import type { MountedStageScenario, StageScenarioOptions } from './stage/types'
+import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPosition } from './platform/progress'
 import { lessonLinks } from './platform/links'
 import { weeks } from './platform/curriculum'
 
-const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X }
+const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X }
 
-const lessonLoaders: Record<LessonId, () => Promise<{ lesson: LessonOptions }>> = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lessonLoaders: Record<LessonId, () => Promise<{ lesson: StageScenarioOptions<any> }>> = {
   'host-to-gpu': () => import('./host-to-gpu/player'),
   'ssh-tmux': () => import('./ssh-tmux/player'),
   streams: () => import('./streams/player'),
@@ -55,17 +56,15 @@ let atlasMode: 'all' | 'domains' = currentRoute.view === 'atlas' ? currentRoute.
 let atlasQuery = ''
 let atlasKind: 'all' | 'scene' | 'subject' | 'scenario' = 'all'
 let trail: TrailItem[] = []
-let playbackTimer: ReturnType<typeof setInterval> | undefined
 let renderedInspector = ''
 let renderedScene: SceneId | undefined
 let renderedHubKey = ''
 let renderedRelatedKey = ''
 let renderedResumeKey = ''
 let renderedTransitionKey = ''
-let activeLesson: { id: LessonId; mounted: MountedLesson } | null = null
+let activeLesson: { id: LessonId; mounted: MountedStageScenario } | null = null
 let lessonLoadToken = 0
 
-const visitedScenarios = new Set<ScenarioId>()
 const learning = new LearningProgress(browserStorage())
 const savedLessons = learning.lessons
 let lastResumable: { entryId: string; route: string; title: string; glyph: string; tone: Tone } | null = null
@@ -84,10 +83,7 @@ function refreshIcons(): void {
 
 function progressForEntry(entryId: string): string | undefined {
   const lessonState = savedLessons.get(entryId as LessonId)
-  if (lessonState) return lessonState.completed ? 'Completed' : `Beat ${lessonState.beat + 1}/${lessonState.total}`
-  if (entryId === 'first-job' && visitedScenarios.has('first-job')) {
-    return `Step ${state.scenario === 'first-job' ? state.step + 1 : 1}/${scenarios['first-job'].steps.length}`
-  }
+  if (lessonState) return lessonState.completed ? 'Completed' : `Step ${lessonState.beat + 1}/${lessonState.total}`
   return undefined
 }
 
@@ -98,20 +94,12 @@ function canonicalHash(): string {
   if (currentRoute.view === 'concept') return `#atlas/concept/${currentRoute.id}`
   if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
-  if (currentRoute.view === 'lesson') return `#lesson/${currentRoute.lesson}`
-  if (state.mode === 'scenario') return `#scenario/${state.scenario}`
+  if (currentRoute.view === 'lesson') {
+    return currentRoute.step ? `#lesson/${currentRoute.lesson}/${currentRoute.step}` : `#lesson/${currentRoute.lesson}`
+  }
   const subject = state.scene === 'a30' ? state.selected : state.clusterSelected
   const defaultSubject = state.scene === 'a30' ? 'gpu' : 'a30'
   return `#${state.scene}${subject === defaultSubject ? '' : `/${subject}`}`
-}
-
-function syncPlaybackTimer(): void {
-  const shouldPlay = currentRoute.view === 'workbench' && state.playing
-  if (shouldPlay && !playbackTimer) playbackTimer = setInterval(() => dispatchScene({ type: 'tick' }), 4800)
-  if (!shouldPlay && playbackTimer) {
-    clearInterval(playbackTimer)
-    playbackTimer = undefined
-  }
 }
 
 function stopActiveLesson(): void {
@@ -123,8 +111,13 @@ function stopActiveLesson(): void {
   }
 }
 
-async function ensureLessonMounted(lessonId: LessonId): Promise<void> {
-  if (activeLesson?.id === lessonId) return
+async function ensureLessonMounted(lessonId: LessonId, requestedStep?: number): Promise<void> {
+  if (activeLesson?.id === lessonId) {
+    if (requestedStep !== undefined) {
+      activeLesson.mounted.goToStep(requestedStep - 1)
+    }
+    return
+  }
   stopActiveLesson()
   const token = ++lessonLoadToken
   const container = element('lesson-view')
@@ -132,13 +125,15 @@ async function ensureLessonMounted(lessonId: LessonId): Promise<void> {
   const { lesson } = await lessonLoaders[lessonId]()
   if (token !== lessonLoadToken || currentRoute.view !== 'lesson' || currentRoute.lesson !== lessonId) return
   const saved = savedLessons.get(lessonId)
-  const resumeMs = saved && saved.positionMs > 0 && saved.positionMs < lesson.timeline.durationMs ? saved.positionMs : 0
+  const initialStep = requestedStep !== undefined
+    ? Math.max(0, Math.min(lesson.steps.length - 1, requestedStep - 1))
+    : resolveSavedStep(saved, lesson.steps.length)
   const entry = getEntry(lessonId)!
-  const mounted = mountLesson(lesson, {
+  const mounted = mountStageScenario(lesson, {
     container,
-    initialPositionMs: resumeMs,
-    onProgress(positionMs, beatIndex, beatCount) {
-      learning.record(lessonId, { positionMs, beat: beatIndex, total: beatCount, durationMs: lesson.timeline.durationMs })
+    initialStep,
+    onProgress(stepIndex, stepCount, completed) {
+      learning.record(lessonId, stepBookmarkPosition(stepIndex, stepCount, completed))
       lastResumable = { entryId: entry.id, route: `#lesson/${lessonId}`, title: entry.shortTitle, glyph: entry.glyph, tone: entry.tone }
       renderResumeSlot()
     },
@@ -149,23 +144,10 @@ async function ensureLessonMounted(lessonId: LessonId): Promise<void> {
 function applyParsedRoute(parsed: ParsedRoute): void {
   currentRoute = parsed
   if (parsed.view !== 'lesson') stopActiveLesson()
-  if (parsed.view !== 'workbench' && state.playing) {
-    state = updateState(state, { type: 'play' })
-  }
   if (parsed.view === 'atlas') {
     atlasMode = parsed.mode
   } else if (parsed.view === 'workbench') {
-    if (parsed.scenario === 'first-job') {
-      state = updateState(
-        state,
-        visitedScenarios.has('first-job') && state.scenario === 'first-job'
-          ? { type: 'mode', mode: 'scenario' }
-          : { type: 'start-scenario', scenario: 'first-job' },
-      )
-      visitedScenarios.add('first-job')
-      const entry = getEntry('first-job')!
-      lastResumable = { entryId: entry.id, route: '#scenario/first-job', title: entry.shortTitle, glyph: entry.glyph, tone: entry.tone }
-    } else if (parsed.scene === 'a30') {
+    if (parsed.scene === 'a30') {
       const validTopic = parsed.nodeTopic && Object.hasOwn(topics, parsed.nodeTopic) ? parsed.nodeTopic : undefined
       state = updateState(state, { type: 'browse', scene: 'a30', topic: validTopic })
     } else {
@@ -173,7 +155,7 @@ function applyParsedRoute(parsed: ParsedRoute): void {
       state = updateState(state, { type: 'browse', scene: 'cluster', topic: validClusterTopic })
     }
   } else if (parsed.view === 'lesson') {
-    void ensureLessonMounted(parsed.lesson)
+    void ensureLessonMounted(parsed.lesson, parsed.step)
   }
 }
 
@@ -200,7 +182,6 @@ function navigateTo(hash: string, options: { push?: boolean; recordTrail?: boole
       : element('page-title')
     targetHeading.focus({ preventScroll: true })
   }
-  syncPlaybackTimer()
 }
 
 function dispatchScene(action: Action, recordHistory = true): void {
@@ -208,13 +189,6 @@ function dispatchScene(action: Action, recordHistory = true): void {
   const prevHash = canonicalHash()
   const prevState = state
   state = updateState(state, action)
-  if (action.type === 'start-scenario' || state.mode === 'scenario') {
-    visitedScenarios.add(state.scenario)
-    if (state.scenario === 'first-job') {
-      const entry = getEntry('first-job')!
-      lastResumable = { entryId: entry.id, route: '#scenario/first-job', title: entry.shortTitle, glyph: entry.glyph, tone: entry.tone }
-    }
-  }
   currentRoute = { view: 'workbench', scene: state.scene }
   render()
   const nextHash = canonicalHash()
@@ -227,7 +201,6 @@ function dispatchScene(action: Action, recordHistory = true): void {
     }
   }
   if (action.type === 'browse' || action.type === 'navigate') element('page-title').focus({ preventScroll: true })
-  syncPlaybackTimer()
 }
 
 function triggerModestSettle(surface: HTMLElement, key: string): void {
@@ -246,7 +219,9 @@ function renderResumeSlot(): void {
   }
   const progress = progressForEntry(lastResumable.entryId) ?? 'Saved'
   const key = `${lastResumable.entryId}:${progress}:${canonicalHash()}`
-  const isCurrent = canonicalHash() === lastResumable.route
+  const isCurrent =
+    canonicalHash() === lastResumable.route ||
+    (currentRoute.view === 'lesson' && currentRoute.lesson === lastResumable.entryId)
   slot.hidden = isCurrent
   if (isCurrent || renderedResumeKey === key) return
   renderedResumeKey = key
@@ -314,11 +289,7 @@ function renderAtlasSection(): void {
 }
 
 function renderWorkbench(): void {
-  const currentScenario = scenarios[state.scenario]
-  const activeStage = currentScenario.steps[state.step]!
-  const scenario = state.mode === 'scenario'
   const node = state.scene === 'a30'
-  const nodeStep = activeStage.nodeStep ?? -1
   element('cluster-view').hidden = node
   element('node-view').hidden = !node
   element('view-tools').hidden = !node
@@ -336,13 +307,13 @@ function renderWorkbench(): void {
   const linkedScenario = activeEntry?.related
     .map(id => getEntry(id))
     .find((item): item is EntryDef => Boolean(item && item.kind === 'scenario'))
-  const inspectorKey = `${state.scene}/${subjectId}/${state.mode}/${linkedScenario?.id ?? ''}`
+  const inspectorKey = `${state.scene}/${subjectId}/${linkedScenario?.id ?? ''}`
   if (renderedInspector !== inspectorKey) {
     const related = node ? topics[state.selected].related.map(identifier => `<button type="button" class="text-link" data-select="${identifier}">${topics[identifier].name} ${icon('chevron-right')}</button>`).join('') : ''
     const openAnatomyBtn = !node && subjectId === 'a30'
       ? `<button type="button" class="open-scene-button" data-browse-scene="a30">Open anatomy ${icon('arrow-right')}</button>`
       : ''
-    const scenarioHref = linkedScenario && state.mode !== 'scenario' ? routeForTarget(linkedScenario.target) : null
+    const scenarioHref = linkedScenario ? routeForTarget(linkedScenario.target) : null
     const openScenarioBtn = scenarioHref && linkedScenario
       ? `<a class="open-scenario-link" href="${scenarioHref}" data-entry-link="${linkedScenario.id}"><span>${icon('play')} ${linkedScenario.title}</span>${icon('arrow-right')}</a>`
       : ''
@@ -362,9 +333,8 @@ function renderWorkbench(): void {
     subjectElement.setAttribute('aria-pressed', String(selected))
     subjectElement.classList.toggle('is-selected', selected)
   })
-  element('cluster-stage').classList.toggle('storage-focused', scenario && state.clusterSelected === 'storage')
+  element('cluster-stage').classList.toggle('storage-focused', state.clusterSelected === 'storage')
   document.querySelectorAll<SVGElement>('[data-family-link]').forEach(link => link.classList.toggle('is-active', link.dataset.familyLink === state.clusterSelected))
-  element('scenario-panel').hidden = !scenario
   element('explode-button').setAttribute('aria-pressed', String(state.exploded))
   element('explode-button').setAttribute('aria-label', state.exploded ? 'Assemble node layers' : 'Explode node layers')
   element('explode-button').title = state.exploded ? 'Assemble node layers' : 'Explode node layers'
@@ -372,41 +342,22 @@ function renderWorkbench(): void {
   element('remote-button').setAttribute('aria-pressed', String(state.placement === 'remote'))
   const diagram = element('diagram-stage')
   diagram.classList.toggle('is-exploded', state.exploded)
-  diagram.classList.toggle('is-scenario', scenario)
-  diagram.classList.toggle('is-allocated', scenario && nodeStep >= 0 && nodeStep < 5)
-  diagram.classList.toggle('is-computing', scenario && nodeStep === 3)
   diagram.classList.toggle('remote-placement', state.placement === 'remote')
-  diagram.classList.toggle('show-locality', state.selected === 'numa' || scenario && state.placement === 'remote')
-  diagram.dataset.stage = String(state.step)
+  const previewLocality = state.selected === 'numa' || state.selected === 'pcie' || state.selected === 'memory'
+  diagram.classList.toggle('show-locality', previewLocality)
   diagram.querySelectorAll<SVGElement>('[data-topic]').forEach(part => {
     const selected = part.dataset.topic === state.selected
     part.classList.toggle('is-selected', selected)
     part.setAttribute('aria-pressed', String(selected))
   })
   diagram.querySelectorAll<SVGElement>('[data-annotation]').forEach(annotation => annotation.classList.toggle('is-selected', annotation.dataset.annotation === state.selected))
-  const activeLinks = scenario && node ? transferPath(nodeStep, state.placement) : []
-  diagram.querySelectorAll<SVGElement>('[data-link]').forEach(connection => connection.classList.toggle('is-active', activeLinks.includes(connection.dataset.link as typeof activeLinks[number])))
+  const previewLinks = node && (state.selected === 'pcie' || state.selected === 'numa')
+    ? copyPath('h2d', state.placement)
+    : []
+  diagram.querySelectorAll<SVGElement>('[data-link]').forEach(connection => connection.classList.toggle('is-active', previewLinks.includes(connection.dataset.link as typeof previewLinks[number])))
   diagram.querySelectorAll<SVGElement>('[data-flow]').forEach(flow => {
-    flow.classList.toggle('is-active', activeLinks.includes(flow.dataset.flow as typeof activeLinks[number]))
-    flow.classList.toggle('is-reversed', nodeStep === 4)
+    flow.classList.remove('is-active', 'is-reversed')
   })
-  element('step-title').textContent = activeStage.title
-  element('step-description').textContent = activeStage.description
-  element('scenario-title').textContent = currentScenario.name
-  element('step-count').textContent = `${String(state.step + 1).padStart(2, '0')} / ${String(currentScenario.steps.length).padStart(2, '0')}  ${activeStage.label}`
-  element('step-command').hidden = !activeStage.command
-  element('step-command').textContent = activeStage.command ?? ''
-  const range = element<HTMLInputElement>('step-range')
-  range.max = String(currentScenario.steps.length - 1)
-  range.value = String(state.step)
-  range.setAttribute('aria-valuetext', `Step ${state.step + 1} of ${currentScenario.steps.length}: ${activeStage.label}`)
-  range.style.setProperty('--progress', `${state.step / (currentScenario.steps.length - 1) * 100}%`)
-  element<HTMLButtonElement>('previous-button').disabled = state.step === 0
-  element<HTMLButtonElement>('next-button').disabled = state.step === currentScenario.steps.length - 1
-  const playButton = element<HTMLButtonElement>('play-button')
-  playButton.innerHTML = icon(state.playing ? 'pause' : 'play')
-  playButton.setAttribute('aria-label', state.playing ? 'Pause scenario' : state.step === currentScenario.steps.length - 1 ? 'Replay scenario' : 'Play scenario')
-  playButton.title = playButton.getAttribute('aria-label')!
 }
 
 function render(): void {
@@ -426,7 +377,7 @@ function render(): void {
   const page = currentRoute
   platform.hidden = !['learn', 'practice', 'weeks', 'concept'].includes(page.view)
   if (platform.hidden) platform.replaceChildren()
-  const mode = page.view === 'lesson' || page.view === 'learn' || (page.view === 'workbench' && state.mode === 'scenario') ? 'learn'
+  const mode = page.view === 'lesson' || page.view === 'learn' ? 'learn'
     : page.view === 'practice' || page.view === 'weeks' ? page.view : 'atlas'
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach(a => {
     if (a.dataset.mode === mode) a.setAttribute('aria-current', 'location')
@@ -480,24 +431,20 @@ function render(): void {
   } else {
     const node = state.scene === 'a30'
     const software = !node && ['spack', 'lmod', 'slurm'].includes(state.clusterSelected)
-    title = state.mode === 'scenario'
-      ? scenarios[state.scenario].name
-      : node
-        ? 'A30 GPU node'
-        : software
-          ? clusterTopics[state.clusterSelected].name
-          : state.clusterSelected === 'storage'
-            ? 'Shared storage'
-            : state.clusterSelected === 'fabric'
-              ? 'Network fabric'
-              : 'Cluster overview'
-    breadcrumb = state.mode === 'scenario'
-      ? scenarios[state.scenario].name
-      : owningDomain
-        ? getCategory(owningDomain).shortName
-        : node ? 'Compute architecture' : 'System'
+    title = node
+      ? 'A30 GPU node'
+      : software
+        ? clusterTopics[state.clusterSelected].name
+        : state.clusterSelected === 'storage'
+          ? 'Shared storage'
+          : state.clusterSelected === 'fabric'
+            ? 'Network fabric'
+            : 'Cluster overview'
+    breadcrumb = owningDomain
+      ? getCategory(owningDomain).shortName
+      : node ? 'Compute architecture' : 'System'
     renderWorkbench()
-    triggerModestSettle(workbench, `workbench:${state.scene}:${state.mode}`)
+    triggerModestSettle(workbench, `workbench:${state.scene}`)
   }
 
   element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
@@ -509,7 +456,7 @@ function render(): void {
 
   const activeDirectNav = currentRoute.view === 'atlas'
     ? 'atlas'
-    : currentRoute.view === 'workbench' && state.mode === 'explore'
+    : currentRoute.view === 'workbench'
       ? state.scene === 'a30' ? 'a30' : state.clusterSelected === 'a30' ? 'overview' : ''
       : ''
 
@@ -740,25 +687,17 @@ window.addEventListener('popstate', event => {
   trail = Array.isArray(event.state?.trail) ? event.state.trail : []
   applyParsedRoute(parseRoute(location.hash))
   render()
-  syncPlaybackTimer()
 })
 element<HTMLSelectElement>('subject-picker').addEventListener('change', event => {
   const subject = (event.target as HTMLSelectElement).value
   dispatchScene(state.scene === 'a30' ? { type: 'select', topic: subject as TopicId } : { type: 'cluster-select', topic: subject as ClusterTopicId })
 })
-element<HTMLInputElement>('step-range').addEventListener('input', event => dispatchScene({ type: 'step', step: Number((event.target as HTMLInputElement).value) }))
-element('leave-scenario').addEventListener('click', () => dispatchScene({ type: 'mode', mode: 'explore' }))
-element('restart-scenario').addEventListener('click', () => dispatchScene({ type: 'start-scenario', scenario: state.scenario }))
 element('local-button').addEventListener('click', () => dispatchScene({ type: 'placement', placement: 'local' }))
 element('remote-button').addEventListener('click', () => dispatchScene({ type: 'placement', placement: 'remote' }))
 element('explode-button').addEventListener('click', () => dispatchScene({ type: 'explode' }))
 element('reset-button').addEventListener('click', () => dispatchScene({ type: 'reset-view' }))
-element('play-button').addEventListener('click', () => dispatchScene({ type: 'play' }))
-element('previous-button').addEventListener('click', () => dispatchScene({ type: 'step', step: state.step - 1 }))
-element('next-button').addEventListener('click', () => dispatchScene({ type: 'step', step: state.step + 1 }))
 const dialog = element<HTMLDialogElement>('evidence-dialog')
 const openEvidence = () => {
-  if (state.playing) dispatchScene({ type: 'play' })
   activeLesson?.mounted.pause()
   hidePreview()
   closeNavigation()
@@ -780,7 +719,6 @@ dialog.addEventListener('click', event => {
 })
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) learning.save()
-  if (document.hidden && state.playing) dispatchScene({ type: 'play' })
 })
 window.addEventListener('pagehide', () => learning.save())
 const narrowScreen = matchMedia('(max-width: 900px)')
@@ -799,7 +737,6 @@ function closeNavigation(restoreFocus = false): void {
 }
 element('menu-button').addEventListener('click', () => {
   if (document.body.classList.contains('navigation-open')) return closeNavigation(true)
-  if (state.playing) dispatchScene({ type: 'play' })
   activeLesson?.mounted.pause()
   hidePreview()
   document.body.classList.add('navigation-open')
@@ -871,7 +808,6 @@ const searchDialog = element<HTMLDialogElement>('switcher')
 let switcherReady: Promise<void> | undefined
 async function openSwitcher() {
   if (searchDialog.open || dialog.open) return
-  if (state.playing) dispatchScene({ type: 'play' })
   activeLesson?.mounted.pause()
   closeNavigation()
   hidePreview()
@@ -906,4 +842,3 @@ document.addEventListener('keydown', event => {
 applyParsedRoute(currentRoute)
 render()
 history.replaceState({ trail }, '', canonicalHash())
-syncPlaybackTimer()
