@@ -15,6 +15,7 @@ import {
   isCategoryId,
   parseRoute,
   popTrail,
+  pruneTrailForDestination,
   pushTrail,
   routeForEntry,
   routeForTarget,
@@ -221,9 +222,13 @@ function dispatchScene(action: Action, recordHistory = true): void {
       trail = pushTrail(trail, trailSnapshotForCurrent(parseRoute(prevHash), prevHash, prevState), nextHash)
       history.pushState({ trail }, '', nextHash)
     } else {
+      trail = pruneTrailForDestination(trail, nextHash)
       history.replaceState({ trail }, '', nextHash)
     }
+  } else {
+    trail = pruneTrailForDestination(trail, nextHash)
   }
+  renderThinkBackAndRelated()
   if (action.type === 'browse' || action.type === 'navigate') element('page-title').focus({ preventScroll: true })
 }
 
@@ -625,6 +630,7 @@ app.addEventListener('click', event => {
     const mode = atlasModeBtn.dataset.atlasMode === 'domains' ? 'domains' : 'all'
     atlasMode = mode
     currentRoute = { view: 'atlas', mode }
+    trail = pruneTrailForDestination(trail, canonicalHash())
     hidePreview()
     render()
     history.replaceState({ trail }, '', canonicalHash())
@@ -737,8 +743,8 @@ element('cluster-stage').addEventListener('keydown', event => {
 window.addEventListener('popstate', event => {
   hidePreview()
   closeNavigation()
-  trail = Array.isArray(event.state?.trail) ? event.state.trail : []
   applyParsedRoute(parseRoute(location.hash))
+  trail = pruneTrailForDestination(Array.isArray(event.state?.trail) ? event.state.trail : [], canonicalHash())
   render()
 })
 element<HTMLSelectElement>('subject-picker').addEventListener('change', event => {
