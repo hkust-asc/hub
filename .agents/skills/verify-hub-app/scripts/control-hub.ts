@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util'
 
 interface InstanceMetadata {
   runId: string
+  state: 'starting' | 'ready'
   pid: number
   procStartTime: string | null
   port: number
@@ -53,6 +54,16 @@ function ensureOwnedScratchDir(scratchDir: string): void {
 function openLogFileNoFollow(logPath: string): number {
   const noFollow = fs.constants.O_NOFOLLOW ?? 0
   return fs.openSync(logPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow, 0o600)
+}
+
+function writeFileNoFollow(filePath: string, data: string | Uint8Array, mode = 0o600): void {
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0
+  const fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow, mode)
+  try {
+    fs.writeFileSync(fd, data)
+  } finally {
+    fs.closeSync(fd)
+  }
 }
 
 function instancePathFor(runId: string): string {
@@ -200,8 +211,23 @@ async function cmdLaunch(runId: string, preferredPort?: number): Promise<void> {
     throw spawnErr ?? new Error('Failed to spawn Vite dev server')
   }
   const procStartTime = readProcStartTime(childPid)
+  const startedAt = new Date().toISOString()
 
   try {
+    const pendingMeta: InstanceMetadata = {
+      runId,
+      state: 'starting',
+      pid: childPid,
+      procStartTime,
+      port: preferredPort ?? 0,
+      url: '',
+      repoRoot: REPO_ROOT,
+      commit,
+      scratchDir,
+      startedAt,
+    }
+    writeFileNoFollow(instFile, `${JSON.stringify(pendingMeta, null, 2)}\n`, 0o600)
+
     const deadline = Date.now() + 15_000
     let lastReason = 'waiting for Vite Local URL banner'
     let boundPort: number | undefined
@@ -230,6 +256,7 @@ async function cmdLaunch(runId: string, preferredPort?: number): Promise<void> {
         if (ready.ok && matchesProcessIdentity(childPid, procStartTime, 'vite')) {
           const meta: InstanceMetadata = {
             runId,
+            state: 'ready',
             pid: childPid,
             procStartTime,
             port: boundPort,
@@ -237,9 +264,9 @@ async function cmdLaunch(runId: string, preferredPort?: number): Promise<void> {
             repoRoot: REPO_ROOT,
             commit,
             scratchDir,
-            startedAt: new Date().toISOString(),
+            startedAt,
           }
-          fs.writeFileSync(instFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: 0o600 })
+          writeFileNoFollow(instFile, `${JSON.stringify(meta, null, 2)}\n`, 0o600)
           process.stdout.write(`${JSON.stringify({ status: 'ready', ...meta }, null, 2)}\n`)
           return
         }
@@ -264,6 +291,9 @@ async function runDoctorCheck(runId: string): Promise<InstanceMetadata> {
     throw new Error(`No instance metadata at ${instFile}. Did you run 'launch --run-id ${runId}'?`)
   }
   const meta = JSON.parse(fs.readFileSync(instFile, 'utf8')) as InstanceMetadata
+  if (meta.state !== 'ready') {
+    throw new Error(`Instance '${runId}' is in state '${String(meta.state)}' rather than 'ready'. Run cleanup and launch again.`)
+  }
   if (meta.repoRoot !== REPO_ROOT) {
     throw new Error(`Instance repoRoot mismatch: ${meta.repoRoot} !== ${REPO_ROOT}`)
   }
@@ -295,42 +325,59 @@ async function cmdDoctor(runId: string): Promise<void> {
   process.stdout.write(`${JSON.stringify({ status: 'healthy', ...meta }, null, 2)}\n`)
 }
 
+function isProcessGroupAlive(pgid: number): boolean {
+  if (!Number.isInteger(pgid) || pgid <= 1) return false
+  try {
+    process.kill(-pgid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
 async function terminatePidTree(
   pid: number,
   expectedStartTime: string | null | undefined,
   expectedCmdToken?: string,
 ): Promise<boolean> {
   if (!matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) return false
+  let hasProcessGroup = true
   try {
     process.kill(-pid, 'SIGTERM')
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ESRCH') hasProcessGroup = false
     try {
       process.kill(pid, 'SIGTERM')
     } catch {
-      return !matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)
+      // leader already exited
     }
   }
+  const stillRunning = () =>
+    matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken) || (hasProcessGroup && isProcessGroupAlive(pid))
+
   const deadline = Date.now() + 5_000
-  while (Date.now() < deadline && matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+  while (Date.now() < deadline && stillRunning()) {
     await sleep(80)
   }
-  if (matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+  if (stillRunning()) {
     try {
       process.kill(-pid, 'SIGKILL')
     } catch {
       try {
-        process.kill(pid, 'SIGKILL')
+        if (matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+          process.kill(pid, 'SIGKILL')
+        }
       } catch {
         // already exited
       }
     }
     const killDeadline = Date.now() + 1_500
-    while (Date.now() < killDeadline && matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+    while (Date.now() < killDeadline && stillRunning()) {
       await sleep(50)
     }
   }
-  if (matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
-    throw new Error(`Failed to terminate owned process PID ${pid}`)
+  if (stillRunning()) {
+    throw new Error(`Failed to terminate owned process group PID ${pid}`)
   }
   return true
 }
@@ -442,7 +489,7 @@ class CdpSession {
 
   async screenshot(outFile: string): Promise<void> {
     const { data } = await this.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
-    fs.writeFileSync(outFile, Buffer.from(data, 'base64'))
+    writeFileNoFollow(outFile, Buffer.from(data, 'base64'), 0o600)
   }
 
   close(): void {
@@ -544,8 +591,14 @@ async function withHeadlessPage<T>(scratchDir: string, fn: (cdp: CdpSession) => 
       cdp.close()
     }
   } finally {
-    if (child?.pid) await terminatePidTree(child.pid, chromeStartTime)
-    fs.rmSync(profileDir, { recursive: true, force: true })
+    let groupStopped = true
+    if (child?.pid) {
+      await terminatePidTree(child.pid, chromeStartTime)
+      groupStopped = !isProcessGroupAlive(child.pid)
+    }
+    if (groupStopped) {
+      fs.rmSync(profileDir, { recursive: true, force: true })
+    }
   }
 }
 
@@ -559,7 +612,17 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
     )
   }
   const resolvedEvidence = path.resolve(evidenceDir)
-  fs.mkdirSync(resolvedEvidence, { recursive: true })
+  fs.mkdirSync(resolvedEvidence, { recursive: true, mode: 0o700 })
+  const evStat = fs.lstatSync(resolvedEvidence)
+  if (!evStat.isDirectory() || evStat.isSymbolicLink()) {
+    throw new Error(`--evidence-dir (${resolvedEvidence}) must be a real directory, not a symlink.`)
+  }
+  if (typeof process.getuid === 'function' && evStat.uid !== process.getuid()) {
+    throw new Error(`--evidence-dir (${resolvedEvidence}) is not owned by the current user.`)
+  }
+  if ((evStat.mode & 0o022) !== 0) {
+    throw new Error(`--evidence-dir (${resolvedEvidence}) is group/world-writable (${(evStat.mode & 0o777).toString(8)}).`)
+  }
   const createdEvidenceReal = fs.realpathSync(resolvedEvidence)
   if (createdEvidenceReal === resolvedScratch || createdEvidenceReal.startsWith(`${resolvedScratch}${path.sep}`)) {
     throw new Error(`Resolved --evidence-dir (${createdEvidenceReal}) points inside scratch (${resolvedScratch}).`)
@@ -833,7 +896,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
   })
 
   const reportPath = recordArtifact('verification-report.json')
-  fs.writeFileSync(reportPath, `${JSON.stringify(summary, null, 2)}\n`)
+  writeFileNoFollow(reportPath, `${JSON.stringify(summary, null, 2)}\n`, 0o600)
   process.stdout.write(`${JSON.stringify({ status: 'verified', reportPath, artifactCount: artifacts.length }, null, 2)}\n`)
 }
 
