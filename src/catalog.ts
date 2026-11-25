@@ -850,8 +850,14 @@ export function fallbackBackTarget(
   return { route: `#atlas/${cat.id}`, label: cat.shortName, glyph: cat.glyph, tone: cat.tone }
 }
 
+export function pruneTrailForDestination(stack: readonly TrailItem[], destinationRoute: string): TrailItem[] {
+  let end = stack.length
+  while (end > 0 && stack[end - 1]!.route === destinationRoute) end--
+  return end === stack.length ? [...stack] : stack.slice(0, end)
+}
+
 export function pushTrail(stack: readonly TrailItem[], item: TrailItem, destinationRoute: string): TrailItem[] {
-  if (item.route === destinationRoute) return [...stack]
+  if (item.route === destinationRoute) return pruneTrailForDestination(stack, destinationRoute)
   const filtered = stack.at(-1)?.route === item.route ? [...stack] : [...stack, item]
   return filtered.slice(-12)
 }
