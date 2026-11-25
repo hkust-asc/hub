@@ -1,6 +1,6 @@
 # HPC4 Anatomy: Scene-Based Architecture Explorer
 
-A small Vite / TypeScript explorer for HPC and ASC workshop concepts, with HPC4 as a concrete example. Its SVG cutaways and schematics run without a 3D engine or a live server connection.
+A Vite / TypeScript learning companion for HPC and ASC workshops. Its four modes share one catalog: explore a mechanism, rehearse it in a simulated shell, apply it in a field quest, and return to a permanent reference. The app never connects to a training server.
 
 The agreed product direction is recorded in [DIRECTION.md](DIRECTION.md), including the Create Ponder-inspired interaction model, reuse boundaries, evidence policy, and near-term sequence. [CONTEXT.md](CONTEXT.md) defines the shared scene/scenario vocabulary.
 
@@ -14,11 +14,25 @@ npm run dev -- --host 127.0.0.1
 ## Verify
 
 ```sh
-node --test tests/model.test.ts
-npm run build
+npm run check
 ```
 
-The model tests require Node.js 22.18 or newer for native TypeScript execution.
+This runs all `tests/*.test.ts` suites (including sandbox replays) and the production build. Use Node.js 22.18 or newer for native TypeScript execution.
+
+## Four ways in
+
+| Mode | Try it | What happens |
+| --- | --- | --- |
+| Learn | `#learn` → `#lesson/streams` | Guided walkthroughs keep their existing player, timeline, Inspect and URLs. Follow a practice or concept link below the player. |
+| Practice | `#practice` → `#practice/1` | Six Linux X-Ray missions run against an in-memory shell and filesystem. Inspect files, descriptors, PATH and processes, then review proposals **without executing them**. Complete one mission to open the next. |
+| Weeks | `#weeks/asc01` | Week 01 pairs Learn and Practice with the actual [Linux & Git workshop](https://github.com/hkust-asc/ws26-01-linux-git). The local checklist is self-reported, not a submission. Credentials, live exercises, profiles and PRs stay outside this app. |
+| Atlas | `#atlas` → `#atlas/concept/standard-streams` | Reference cards, including all 17 Linux X-Ray Codex topics, are always readable. A *Practiced* mark records rehearsal, not permission to read. Existing scene links such as `#cluster/login` still go straight to the inspector. |
+
+Use **Ctrl/Cmd+K** to jump across modes (arrows, Enter, Escape). On smaller screens the modes are in the navigation drawer. Legacy `#scenario/first-job` and `?lesson=...` links still resolve.
+
+Learn bookmarks/completion, field checkboxes, practice completions and simulated command history stay in this browser. Do not enter real credentials. Visiting a lesson or card and returning to the same mission keeps its live terminal; restarting a mission, selecting another mission or reloading the page starts a fresh simulated filesystem. **Reset practice progress** clears the practice records, not the weekly checklist or lesson bookmarks.
+
+**For lesson authors:** register a scenario in the catalog and lesson loader as before; Learn and search pick it up automatically. Add optional pairings in `src/platform/links.ts` or `src/platform/curriculum.ts`. Neither lesson rendering nor the build requires a checkout of the workshop repos. The port is based on Linux X-Ray at `6effdce`; Week 01 is based on the workshop brief at `e6a434e`.
 
 ## Explore
 
@@ -46,6 +60,8 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 ## Structure
 
 - `src/catalog.ts`: domain categories, current & planned entry registry, route parsing, filtering, and Think Back navigation trail.
+- `src/platform/`: mode surfaces, search, Codex-to-Atlas IDs, weekly briefs and local learning progress. Add a week in `curriculum.ts` using existing lesson/mission/concept IDs and link to its original workshop repo.
+- `src/practice/engine/`: typed port of the ASC team's Linux X-Ray shell and mission observers. `src/practice/workstation.ts` and `state-view.ts` present those results in the explorer’s visual style; no Linux X-Ray dashboard CSS, live shell, or backend is needed.
 - `src/glyphs.ts`: miniature isometric and schematic SVG glyphs using the shared blue/green/amber/slate palette.
 - `src/model.ts`: subject content, evidence, scene-aware scenarios, state transitions, transfer paths.
 - `src/scene.ts`: reusable projected boxes, node cutaway, and cluster-family glyphs.

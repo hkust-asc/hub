@@ -1,5 +1,7 @@
 import type { Tone } from './glyphs'
 import type { ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
+import { missionLessons, weeks } from './platform/curriculum.ts'
+import { codex } from './platform/codex.ts'
 
 export type CategoryId = 'nodes' | 'interconnect' | 'software' | 'linux' | 'gpu-scaling'
 export type LessonId = 'host-to-gpu' | 'ssh-tmux' | 'streams' | 'linux-fs' | 'first-job' | 'module-load'
@@ -7,6 +9,7 @@ export type EntryKind = 'scene' | 'subject' | 'scenario' | 'planned'
 export type EvidenceBasis = 'published' | 'illustrative' | 'workshop'
 
 export type EntryTarget =
+  | { type: 'concept'; id: string }
   | { type: 'scene'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId }
   | { type: 'scenario'; scenario: ScenarioId }
   | { type: 'lesson'; lesson: LessonId }
@@ -51,6 +54,10 @@ export interface TrailItem {
 }
 
 export type ParsedRoute =
+  | { view: 'learn' }
+  | { view: 'practice'; mission?: number }
+  | { view: 'weeks'; week?: string }
+  | { view: 'concept'; id: string }
   | { view: 'atlas'; mode: 'all' | 'domains' }
   | { view: 'hub'; category: CategoryId }
   | { view: 'workbench'; scene: SceneId; clusterTopic?: ClusterTopicId; nodeTopic?: TopicId; scenario?: ScenarioId }
@@ -114,7 +121,7 @@ export const categories: readonly CategoryDef[] = [
   },
 ] as const
 
-export const entries: readonly EntryDef[] = [
+const architectureEntries: readonly EntryDef[] = [
   // 01. Cluster & Node Families
   {
     id: 'cluster-overview',
@@ -644,6 +651,15 @@ export const entries: readonly EntryDef[] = [
   },
 ] as const
 
+const newCards = Object.entries(codex).filter(([id]) => !architectureEntries.some(entry => entry.id === id))
+export const entries: readonly EntryDef[] = [...architectureEntries, ...newCards.map(([id, card]): EntryDef => ({
+  id, title: card.title, shortTitle: card.title, kind: 'subject', category: 'linux',
+  glyph: ['standard-streams', 'grep', 'pipe'].includes(id) ? 'streams' : 'cat-linux', tone: 'green',
+  question: card.takeaway, summary: card.definition, formatLabel: 'Concept card',
+  evidenceBasis: 'workshop', evidenceLabel: 'ASC Linux X-Ray · Workshop',
+  keywords: `${id} ${card.lookup}`, target: { type: 'concept', id }, related: [],
+}))]
+
 const categoryMap = new Map(categories.map(category => [category.id, category]))
 const entryMap = new Map(entries.map(entry => [entry.id, entry]))
 const validLessons = new Set<LessonId>(['host-to-gpu', 'ssh-tmux', 'streams', 'linux-fs', 'first-job', 'module-load'])
@@ -688,6 +704,8 @@ export function filterEntries(options: {
 
 export function routeForTarget(target: EntryTarget): string | null {
   switch (target.type) {
+    case 'concept':
+      return `#atlas/concept/${target.id}`
     case 'planned':
       return null
     case 'lesson':
@@ -698,8 +716,14 @@ export function routeForTarget(target: EntryTarget): string | null {
       if (target.scene === 'a30') {
         return !target.nodeTopic || target.nodeTopic === 'gpu' ? '#a30' : `#a30/${target.nodeTopic}`
       }
+
       return !target.clusterTopic || target.clusterTopic === 'a30' ? '#cluster' : `#cluster/${target.clusterTopic}`
   }
+}
+
+/** A subject has a permanent reference page, even if it also has an inspection target. */
+export function routeForEntry(entry: EntryDef): string | null {
+  return entry.kind === 'subject' ? `#atlas/concept/${entry.id}` : routeForTarget(entry.target)
 }
 
 export function normalizeLessonUrl(href: string): string | null {
@@ -722,8 +746,13 @@ export function normalizeLessonUrl(href: string): string | null {
 export function parseRoute(hash: string): ParsedRoute {
   const cleaned = hash.replace(/^#/, '').trim()
   if (!cleaned || cleaned === 'atlas') return { view: 'atlas', mode: 'all' }
-  const [head, tail] = cleaned.split('/')
+  const [head, tail, id] = cleaned.split('/')
+  if (head === 'learn') return { view: 'learn' }
+  if (head === 'practice') return Object.hasOwn(missionLessons, tail)
+    ? { view: 'practice', mission: Number(tail) } : { view: 'practice' }
+  if (head === 'weeks') return weeks.some(item => item.id === tail) ? { view: 'weeks', week: tail } : { view: 'weeks' }
   if (head === 'atlas') {
+    if (tail === 'concept' && getEntry(id)?.kind === 'subject') return { view: 'concept', id }
     if (tail === 'domains') return { view: 'atlas', mode: 'domains' }
     if (tail === 'all') return { view: 'atlas', mode: 'all' }
     if (isCategoryId(tail)) return { view: 'hub', category: tail }
@@ -748,6 +777,7 @@ export function activeEntryForState(
   sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): EntryDef | undefined {
   if (route.view === 'lesson') return entryMap.get(route.lesson)
+  if (route.view === 'concept') return entryMap.get(route.id)
   if (route.view !== 'workbench') return undefined
   if (sceneState.mode === 'scenario') {
     return sceneState.scenario === 'first-job' ? entryMap.get('first-job') : entryMap.get('host-to-gpu')
@@ -784,6 +814,13 @@ export function trailSnapshotForCurrent(
   currentHash: string,
   sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): TrailItem {
+  if (route.view === 'learn') return { route: '#learn', label: 'Learn', glyph: 'host-to-gpu', tone: 'blue' }
+  if (route.view === 'practice') return route.mission
+    ? { route: `#practice/${route.mission}`, label: `Mission ${route.mission}`, glyph: 'linux-fs', tone: 'green' }
+    : { route: '#practice', label: 'Practice', glyph: 'linux-fs', tone: 'green' }
+  if (route.view === 'weeks') return route.week
+    ? { route: `#weeks/${route.week}`, label: weeks.find(w => w.id === route.week)!.title, glyph: 'first-job', tone: 'amber' }
+    : { route: '#weeks', label: 'Weeks', glyph: 'first-job', tone: 'amber' }
   if (route.view === 'atlas') {
     return route.mode === 'domains'
       ? { route: '#atlas/domains', label: 'Domains', glyph: 'cluster', tone: 'slate' }
@@ -804,6 +841,9 @@ export function fallbackBackTarget(
   route: ParsedRoute,
   sceneState: { scene: SceneId; mode: 'explore' | 'scenario'; scenario: ScenarioId; selected: TopicId; clusterSelected: ClusterTopicId },
 ): TrailItem | null {
+  if (route.view === 'learn') return null
+  if (route.view === 'practice') return route.mission ? { route: '#practice', label: 'Practice', glyph: 'linux-fs', tone: 'green' } : null
+  if (route.view === 'weeks') return route.week ? { route: '#weeks', label: 'Weeks', glyph: 'first-job', tone: 'amber' } : null
   if (route.view === 'atlas') return null
   if (route.view === 'hub') {
     return { route: '#atlas', label: 'Concept Atlas', glyph: 'cluster', tone: 'slate' }

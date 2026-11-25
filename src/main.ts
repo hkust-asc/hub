@@ -3,6 +3,7 @@ import '@fontsource/ibm-plex-sans/500.css'
 import '@fontsource/ibm-plex-sans/600.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
+import './platform/platform.css'
 import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
@@ -14,6 +15,7 @@ import {
   parseRoute,
   popTrail,
   pushTrail,
+  routeForEntry,
   routeForTarget,
   trailSnapshotForCurrent,
 } from './catalog'
@@ -25,6 +27,9 @@ import { clusterTopics, initialState, scenarios, topics, transferPath, updateSta
 import type { Action, AppState, ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
 import { mountLesson } from './timed-lesson/player'
 import type { LessonOptions, MountedLesson } from './timed-lesson/player'
+import { browserStorage, LearningProgress } from './platform/progress'
+import { lessonLinks } from './platform/links'
+import { weeks } from './platform/curriculum'
 
 const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X }
 
@@ -61,8 +66,13 @@ let activeLesson: { id: LessonId; mounted: MountedLesson } | null = null
 let lessonLoadToken = 0
 
 const visitedScenarios = new Set<ScenarioId>()
-const savedLessons = new Map<LessonId, { positionMs: number; beat: number; total: number; durationMs: number }>()
+const learning = new LearningProgress(browserStorage())
+const savedLessons = learning.lessons
 let lastResumable: { entryId: string; route: string; title: string; glyph: string; tone: Tone } | null = null
+if (learning.last) {
+  const e = getEntry(learning.last)!
+  lastResumable = { entryId: e.id, route: routeForTarget(e.target)!, title: e.shortTitle, glyph: e.glyph, tone: e.tone }
+}
 
 function refreshIcons(): void {
   createIcons({ icons: iconSet, attrs: { 'stroke-width': 1.65, 'aria-hidden': 'true' } })
@@ -74,7 +84,7 @@ function refreshIcons(): void {
 
 function progressForEntry(entryId: string): string | undefined {
   const lessonState = savedLessons.get(entryId as LessonId)
-  if (lessonState) return `Beat ${lessonState.beat + 1}/${lessonState.total}`
+  if (lessonState) return lessonState.completed ? 'Completed' : `Beat ${lessonState.beat + 1}/${lessonState.total}`
   if (entryId === 'first-job' && visitedScenarios.has('first-job')) {
     return `Step ${state.scenario === 'first-job' ? state.step + 1 : 1}/${scenarios['first-job'].steps.length}`
   }
@@ -82,6 +92,10 @@ function progressForEntry(entryId: string): string | undefined {
 }
 
 function canonicalHash(): string {
+  if (currentRoute.view === 'learn') return '#learn'
+  if (currentRoute.view === 'practice') return currentRoute.mission ? `#practice/${currentRoute.mission}` : '#practice'
+  if (currentRoute.view === 'weeks') return currentRoute.week ? `#weeks/${currentRoute.week}` : '#weeks'
+  if (currentRoute.view === 'concept') return `#atlas/concept/${currentRoute.id}`
   if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
   if (currentRoute.view === 'lesson') return `#lesson/${currentRoute.lesson}`
@@ -104,6 +118,7 @@ function stopActiveLesson(): void {
   lessonLoadToken++
   if (activeLesson) {
     activeLesson.mounted.destroy()
+    learning.save()
     activeLesson = null
   }
 }
@@ -123,7 +138,7 @@ async function ensureLessonMounted(lessonId: LessonId): Promise<void> {
     container,
     initialPositionMs: resumeMs,
     onProgress(positionMs, beatIndex, beatCount) {
-      savedLessons.set(lessonId, { positionMs, beat: beatIndex, total: beatCount, durationMs: lesson.timeline.durationMs })
+      learning.record(lessonId, { positionMs, beat: beatIndex, total: beatCount, durationMs: lesson.timeline.durationMs })
       lastResumable = { entryId: entry.id, route: `#lesson/${lessonId}`, title: entry.shortTitle, glyph: entry.glyph, tone: entry.tone }
       renderResumeSlot()
     },
@@ -176,8 +191,8 @@ function navigateTo(hash: string, options: { push?: boolean; recordTrail?: boole
   render()
   const targetHash = canonicalHash()
   if (location.hash !== targetHash) {
-    if (options.push !== false) history.pushState(null, '', targetHash)
-    else history.replaceState(null, '', targetHash)
+    if (options.push !== false) history.pushState({ trail }, '', targetHash)
+    else history.replaceState({ trail }, '', targetHash)
   }
   if (options.focusHeading !== false) {
     const targetHeading = currentRoute.view === 'hub'
@@ -206,9 +221,9 @@ function dispatchScene(action: Action, recordHistory = true): void {
   if (recordHistory && location.hash !== nextHash) {
     if (action.type === 'browse' || action.type === 'navigate') {
       trail = pushTrail(trail, trailSnapshotForCurrent(parseRoute(prevHash), prevHash, prevState), nextHash)
-      history.pushState(null, '', nextHash)
+      history.pushState({ trail }, '', nextHash)
     } else {
-      history.replaceState(null, '', nextHash)
+      history.replaceState({ trail }, '', nextHash)
     }
   }
   if (action.type === 'browse' || action.type === 'navigate') element('page-title').focus({ preventScroll: true })
@@ -273,7 +288,7 @@ function renderThinkBackAndRelated(): void {
   if (renderedRelatedKey === key) return
   renderedRelatedKey = key
   relatedStrip.innerHTML = `<span class="related-label">Related</span>${relatedEntries.map(item => {
-    const route = routeForTarget(item.target)!
+    const route = routeForEntry(item)!
     return `<a class="related-chip" href="${route}" data-entry-link="${item.id}" data-preview-entry="${item.id}" data-tone="${item.tone}" aria-label="${item.title}">
       ${renderGlyph(item.glyph)}
     </a>`
@@ -332,6 +347,14 @@ function renderWorkbench(): void {
       ? `<a class="open-scenario-link" href="${scenarioHref}" data-entry-link="${linkedScenario.id}"><span>${icon('play')} ${linkedScenario.title}</span>${icon('arrow-right')}</a>`
       : ''
     element('inspector-content').innerHTML = `<div class="subject-heading"><span class="topic-icon ${subject.color}">${icon(subject.icon)}</span><span class="topic-eyebrow">${node ? topics[state.selected].eyebrow.split(' / ')[1] : clusterTopics[state.clusterSelected].kind}</span><h2>${subject.name}</h2></div><p class="topic-subtitle">${subject.subtitle}</p><p class="topic-description">${subject.description}</p><dl class="topic-properties">${subject.properties.map(([key, value]) => `<div><dt>${key}</dt><dd>${value}</dd></div>`).join('')}</dl><details class="subject-notes"><summary>Why it matters ${icon('chevron-right')}</summary><p>${subject.takeaway}</p>${related ? `<div class="related-topics">${related}</div>` : ''}</details>${openAnatomyBtn}${openScenarioBtn}`
+    const cardId = activeEntry?.kind === 'subject' ? activeEntry.id : node && subjectId === 'gpu' ? 'gpu-device' : undefined
+    if (cardId) {
+      const card = document.createElement('a')
+      card.className = 'mode-link inspector-reference'
+      card.href = card.dataset.route = `#atlas/concept/${cardId}`
+      card.textContent = 'Open permanent reference →'
+      element('inspector-content').append(card)
+    }
     renderedInspector = inspectorKey
   }
   document.querySelectorAll<SVGElement>('[data-cluster-topic]').forEach(subjectElement => {
@@ -391,12 +414,24 @@ function render(): void {
   const hubView = element('hub-view')
   const workbench = element('workbench')
   const lessonView = element('lesson-view')
+  const platform = element('platform-view')
+  const extras = element('lesson-links')
   element('workspace').dataset.view = currentRoute.view
 
   atlasView.hidden = currentRoute.view !== 'atlas'
   hubView.hidden = currentRoute.view !== 'hub'
   workbench.hidden = currentRoute.view !== 'workbench'
   lessonView.hidden = currentRoute.view !== 'lesson'
+  extras.hidden = lessonView.hidden
+  const page = currentRoute
+  platform.hidden = !['learn', 'practice', 'weeks', 'concept'].includes(page.view)
+  if (platform.hidden) platform.replaceChildren()
+  const mode = page.view === 'lesson' || page.view === 'learn' || (page.view === 'workbench' && state.mode === 'scenario') ? 'learn'
+    : page.view === 'practice' || page.view === 'weeks' ? page.view : 'atlas'
+  document.querySelectorAll<HTMLElement>('[data-mode]').forEach(a => {
+    if (a.dataset.mode === mode) a.setAttribute('aria-current', 'location')
+    else a.removeAttribute('aria-current')
+  })
 
   const activeEntry = activeEntryForState(currentRoute, state)
   const owningDomain: CategoryId | undefined = currentRoute.view === 'hub'
@@ -407,7 +442,19 @@ function render(): void {
   let breadcrumb = 'Atlas'
   let sceneRef = ''
 
-  if (currentRoute.view === 'atlas') {
+  if (page.view === 'learn' || page.view === 'practice' || page.view === 'weeks' || page.view === 'concept') {
+    title = page.view === 'learn' ? 'Guided walkthroughs'
+      : page.view === 'practice' ? (page.mission ? `Practice · Mission ${page.mission}` : 'Practice missions')
+      : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops') : getEntry(page.id)!.title
+    breadcrumb = page.view === 'concept' ? `Atlas / ${getCategory(getEntry(page.id)!.category).shortName}` : mode[0].toUpperCase() + mode.slice(1)
+    platform.textContent = 'Loading…'
+    void import('./platform/views').then(({ showPage }) => {
+      if (currentRoute === page) showPage(platform, page, learning)
+    }).catch(error => {
+      console.error('Could not open learning mode', error)
+      if (currentRoute === page) platform.textContent = 'This learning view could not be loaded. Reload to try again.'
+    })
+  } else if (currentRoute.view === 'atlas') {
     title = atlasMode === 'domains' ? 'Explore by domain' : 'Concept & scenario atlas'
     breadcrumb = atlasMode === 'domains' ? 'Domains' : 'All Entries'
     renderAtlasSection()
@@ -428,6 +475,7 @@ function render(): void {
     const cat = getCategory(entry.category)
     title = entry.title
     breadcrumb = cat.shortName
+    extras.innerHTML = lessonLinks(currentRoute.lesson)
     triggerModestSettle(lessonView, `lesson:${currentRoute.lesson}`)
   } else {
     const node = state.scene === 'a30'
@@ -605,7 +653,7 @@ app.addEventListener('click', event => {
     currentRoute = { view: 'atlas', mode }
     hidePreview()
     render()
-    history.replaceState(null, '', canonicalHash())
+    history.replaceState({ trail }, '', canonicalHash())
     return
   }
 
@@ -686,8 +734,10 @@ element('cluster-stage').addEventListener('keydown', event => {
     dispatchScene({ type: 'cluster-select', topic: topic as ClusterTopicId })
   }
 })
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', event => {
   hidePreview()
+  closeNavigation()
+  trail = Array.isArray(event.state?.trail) ? event.state.trail : []
   applyParsedRoute(parseRoute(location.hash))
   render()
   syncPlaybackTimer()
@@ -729,8 +779,10 @@ dialog.addEventListener('click', event => {
   if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close()
 })
 document.addEventListener('visibilitychange', () => {
+  if (document.hidden) learning.save()
   if (document.hidden && state.playing) dispatchScene({ type: 'play' })
 })
+window.addEventListener('pagehide', () => learning.save())
 const narrowScreen = matchMedia('(max-width: 900px)')
 const sidebar = element('sidebar')
 function closeNavigation(restoreFocus = false): void {
@@ -815,7 +867,43 @@ element('download-button').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500)
 })
 
+const searchDialog = element<HTMLDialogElement>('switcher')
+let switcherReady: Promise<void> | undefined
+async function openSwitcher() {
+  if (searchDialog.open || dialog.open) return
+  if (state.playing) dispatchScene({ type: 'play' })
+  activeLesson?.mounted.pause()
+  closeNavigation()
+  hidePreview()
+  try {
+    await (switcherReady ??= import('./platform/search').then(({ bindSwitcher }) => bindSwitcher(searchDialog, navigateTo)))
+    if (!searchDialog.open) {
+      searchDialog.showModal()
+      const input = element<HTMLInputElement>('switch-input')
+      input.focus()
+      input.select()
+    }
+  } catch (error) {
+    switcherReady = undefined
+    console.error('Could not load quick switcher', error)
+    element('switch-count').textContent = 'Search could not be loaded. Close and try again.'
+    element('close-switcher').onclick = () => searchDialog.close()
+    if (!searchDialog.open) searchDialog.showModal()
+  }
+}
+element('open-switcher').addEventListener('click', openSwitcher)
+const isApplePlatform = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+const kbdHint = isApplePlatform ? '⌘ K' : 'Ctrl K'
+element('search-kbd').textContent = kbdHint
+element('open-switcher').title = `Search all modes (${kbdHint})`
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    void openSwitcher()
+  }
+})
+
 applyParsedRoute(currentRoute)
 render()
-history.replaceState(null, '', canonicalHash())
+history.replaceState({ trail }, '', canonicalHash())
 syncPlaybackTimer()

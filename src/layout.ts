@@ -1,4 +1,4 @@
-import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForTarget } from './catalog'
+import { categories, entries, entriesForCategory, filterEntries, getCategory, routeForEntry } from './catalog'
 import type { CategoryDef, CategoryId, EntryDef } from './catalog'
 import { renderGlyph } from './glyphs'
 import { evidence } from './model'
@@ -10,7 +10,7 @@ export function renderEntryTile(
   entry: EntryDef,
   options: { index?: number; progress?: string; compact?: boolean } = {},
 ): string {
-  const route = routeForTarget(entry.target)
+  const route = routeForEntry(entry)
   const planned = entry.kind === 'planned' || !route
   const style = options.index !== undefined ? ` style="--tile-index: ${Math.min(options.index, 7)}"` : ''
   const tag = planned ? 'button' : 'a'
@@ -141,6 +141,14 @@ export function renderHubView(
 export function createLayout(): string {
   const systemCats = categories.filter(cat => cat.track === 'system')
   const workflowCats = categories.filter(cat => cat.track === 'workflow')
+  const modes = [
+    { name: 'Learn', tone: 'blue' },
+    { name: 'Practice', tone: 'green' },
+    { name: 'Weeks', tone: 'amber' },
+    { name: 'Atlas', tone: 'slate' },
+  ] as const
+  const modeLinks = (className: string) => modes.map(({ name, tone }) =>
+    `<a class="${className}" data-mode="${name.toLowerCase()}" data-tone="${tone}" data-route="#${name.toLowerCase()}" href="#${name.toLowerCase()}"><span class="mode-dot" aria-hidden="true"></span><span>${name}</span></a>`).join('')
   const renderSidebarCat = (cat: CategoryDef) =>
     `<a class="nav-item domain-nav-item" href="#atlas/${cat.id}" data-route="#atlas/${cat.id}" data-domain-nav="${cat.id}" data-tone="${cat.tone}">
       <span class="domain-dot" aria-hidden="true"></span>
@@ -151,13 +159,16 @@ export function createLayout(): string {
     <a class="skip-link" href="#workspace">Skip to workspace</a>
     <header class="topbar">
       <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#atlas" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>anatomy</strong></span></a></div>
-      <button class="evidence-button" id="open-evidence" type="button" aria-label="Illustrative topology" title="Sources and illustrative assumptions"><span class="evidence-dot"></span><span class="evidence-label">Illustrative topology</span>${icon('info')}</button>
+      <nav class="top-modes" aria-label="Learning modes">${modeLinks('mode-tab')}</nav>
+      <div class="top-tools"><button class="search-trigger" id="open-switcher" type="button" title="Search all modes (Ctrl+K)" aria-label="Search all modes" aria-keyshortcuts="Control+K Meta+K">${icon('search')}<span class="search-trigger-label">Search</span><kbd class="search-kbd" id="search-kbd">Ctrl K</kbd></button>
+      <button class="evidence-button" id="open-evidence" type="button" aria-label="Illustrative topology" title="Sources and illustrative assumptions"><span class="evidence-dot"></span><span class="evidence-label">Illustrative topology</span>${icon('info')}</button></div>
     </header>
     <div class="app-layout">
       <button class="nav-backdrop" id="nav-backdrop" type="button" aria-label="Close navigation" hidden></button>
       <aside class="sidebar" id="sidebar" aria-label="Navigation">
         <div class="drawer-heading"><span>HPC4 anatomy</span><button class="icon-button" type="button" id="close-menu" aria-label="Close navigation" title="Close navigation">${icon('x')}</button></div>
         <nav class="primary-nav" aria-label="Primary navigation">
+          <div class="nav-group drawer-modes"><h2>Learning modes</h2>${modeLinks('nav-item')}</div>
           <div class="nav-group">
             <h2>Explore</h2>
             <a class="nav-item" href="#atlas" data-route="#atlas" data-nav-id="atlas">${icon('layout-grid')}<span>Concept Atlas</span></a>
@@ -233,9 +244,16 @@ export function createLayout(): string {
         </section>
 
         <section class="lesson-host" id="lesson-view" aria-label="Interactive scenario" hidden></section>
+        <section id="lesson-links" aria-label="Related practice and concepts" hidden></section>
+        <section id="platform-view" aria-labelledby="page-title" hidden></section>
       </main>
     </div>
     <div class="entry-preview" id="entry-preview" role="tooltip" hidden></div>
+    <dialog id="switcher" aria-labelledby="switch-title"><header><h2 id="switch-title">Search all modes</h2>
+      <button type="button" class="mode-action" id="close-switcher">Close</button></header>
+      <label for="switch-input">Find a lesson, mission, week or reference</label>
+      <input id="switch-input" type="search" role="combobox" aria-expanded="true" aria-controls="switch-list" aria-autocomplete="list" autocomplete="off">
+      <div id="switch-list" role="listbox" aria-label="Destinations"></div><small role="status" id="switch-count"></small></dialog>
     <dialog id="evidence-dialog" aria-labelledby="evidence-title"><div class="dialog-heading"><span class="section-kicker">Sources & assumptions</span><button type="button" class="icon-button" id="close-evidence" aria-label="Close sources and assumptions" title="Close">${icon('x')}</button></div><h2 id="evidence-title">What is real. What is schematic.</h2><p class="dialog-intro">Published HPC4 specifications, checked ${evidence.verified}. These scenes are not an inventory of inspected nodes or switches.</p><h3>Published hardware</h3><ul class="evidence-list published-list">${evidence.published.map(fact => `<li>${icon('check')}<span>${fact}</span></li>`).join('')}</ul><h3>Illustrative, not verified</h3><ul class="evidence-list">${evidence.illustrative.map(fact => `<li>${icon('info')}<span>${fact}</span></li>`).join('')}</ul><p class="dialog-caveat">The GPU operation uses explicit copies without overlap or unified memory. Motion is explanatory, not measured traffic or speed. Cluster glyphs represent families; shared-storage access is a logical relationship, not a measured network route.</p><a class="source-link" href="${evidence.hardwareSource}" target="_blank" rel="noopener noreferrer">Official HPC4 specification ${icon('arrow-up-right')}</a><a class="source-link" href="${evidence.storageSource}" target="_blank" rel="noopener noreferrer">Storage policies ${icon('arrow-up-right')}</a><a class="source-link" href="${evidence.handbook}" target="_blank" rel="noopener noreferrer">HPC handbook ${icon('arrow-up-right')}</a></dialog>
   `
 }
