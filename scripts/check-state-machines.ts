@@ -680,9 +680,9 @@ export function buildLinkGraph(): LinkGraph {
 
     for (let step = 1; step <= stepCount; step++) {
       const stepRoute = `#lesson/${lessonId}/${step}`
-      addEdge(baseRoute, stepRoute, `src/stage/player.ts:step-pill(${lessonId}:${step})`, 'step')
-      if (step > 1) addEdge(stepRoute, `#lesson/${lessonId}/${step - 1}`, `src/stage/runner.ts:prev(${lessonId})`, 'step')
-      if (step < stepCount) addEdge(stepRoute, `#lesson/${lessonId}/${step + 1}`, `src/stage/runner.ts:next(${lessonId})`, 'step')
+      addEdge(baseRoute, stepRoute, `src/stage/player.ts:dispatch(goto:${lessonId}:${step})`, 'step')
+      if (step > 1) addEdge(stepRoute, `#lesson/${lessonId}/${step - 1}`, `src/stage/player.ts:dispatch(prev:${lessonId})`, 'step')
+      if (step < stepCount) addEdge(stepRoute, `#lesson/${lessonId}/${step + 1}`, `src/stage/player.ts:dispatch(next:${lessonId})`, 'step')
       for (const href of extraHrefs) addEdge(stepRoute, href, `src/platform/links.ts:lessonLinks(${lessonId})`, 'content')
       for (const href of relatedHrefs) addEdge(stepRoute, href, `src/main.ts:related-strip(${lessonId})`, 'content')
     }
@@ -915,7 +915,7 @@ export function verifyStateMachines(graph: LinkGraph = buildLinkGraph()): Verifi
   }
 
   const advanceNav = (from: string, to: string, edgeKind: RouteEdge['kind'], stack: readonly TrailItem[]): TrailItem[] => {
-    if (edgeKind === 'in-place') {
+    if (edgeKind === 'in-place' || edgeKind === 'step') {
       return pruneTrailForDestination(stack, to)
     }
     const parsedFrom = parseRoute(from)

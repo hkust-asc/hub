@@ -13,13 +13,17 @@ Fallback(r) ==
   CASE r = "atlas" -> "none"
     [] OTHER -> "atlas"
 
+RECURSIVE PruneTrail(_, _)
 PruneTrail(stack, dest) ==
   IF Len(stack) = 0 THEN <<>>
-  ELSE IF stack[Len(stack)] = dest THEN <<>>
+  ELSE IF stack[Len(stack)] = dest THEN PruneTrail(SubSeq(stack, 1, Len(stack) - 1), dest)
   ELSE stack
 
 AppendCap(stack, item) ==
-  IF Len(stack) >= MaxTrail THEN <<item>> ELSE Append(stack, item)
+  LET next == Append(stack, item)
+  IN IF Len(next) > MaxTrail
+     THEN SubSeq(next, Len(next) - MaxTrail + 1, Len(next))
+     ELSE next
 
 PushTrail(stack, item, dest) ==
   IF Variant = "trail_loop" THEN AppendCap(stack, item)
@@ -82,7 +86,7 @@ ThinkBack ==
   /\ modal = "none" /\ ~drawerOpen
   /\ EffectiveBackTarget /= "none"
   /\ LET dest == EffectiveBackTarget
-         rest == <<>>
+         rest == IF Len(trail) <= 1 THEN <<>> ELSE SubSeq(trail, 1, Len(trail) - 1)
      IN ApplyRoute(dest, IF Variant = "trail_loop" THEN rest ELSE PruneTrail(rest, dest))
   /\ escapeLeaked' = FALSE
   /\ UNCHANGED <<modal, drawerOpen>>

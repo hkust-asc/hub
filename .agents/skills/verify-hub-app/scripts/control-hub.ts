@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync, spawn } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
-import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
@@ -9,6 +8,7 @@ import { parseArgs } from 'node:util'
 interface InstanceMetadata {
   runId: string
   pid: number
+  procStartTime: string | null
   port: number
   url: string
   repoRoot: string
@@ -21,6 +21,10 @@ type JourneyName = 'all' | 'modes' | 'search' | 'stage' | 'practice' | 'layout'
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..')
 
+function getHeadCommit(): string {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim()
+}
+
 function scratchDirFor(runId: string): string {
   if (!/^[a-zA-Z0-9._-]+$/.test(runId)) {
     throw new Error(`Invalid --run-id '${runId}'. Use ASCII letters, digits, '.', '_', or '-'.`)
@@ -28,11 +32,35 @@ function scratchDirFor(runId: string): string {
   return path.join(os.tmpdir(), `hub-verify-${runId}`)
 }
 
+function ensureOwnedScratchDir(scratchDir: string): void {
+  try {
+    fs.mkdirSync(scratchDir, { mode: 0o700 })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+  }
+  const stat = fs.lstatSync(scratchDir)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`Scratch path '${scratchDir}' is not a real directory.`)
+  }
+  if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
+    throw new Error(`Scratch directory '${scratchDir}' is not owned by the current user.`)
+  }
+  if ((stat.mode & 0o077) !== 0) {
+    throw new Error(`Scratch directory '${scratchDir}' has group/other permissions (${(stat.mode & 0o777).toString(8)}); refusing shared access.`)
+  }
+}
+
+function openLogFileNoFollow(logPath: string): number {
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0
+  return fs.openSync(logPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow, 0o600)
+}
+
 function instancePathFor(runId: string): string {
   return path.join(scratchDirFor(runId), 'instance.json')
 }
 
 function isPidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false
   try {
     process.kill(pid, 0)
     return true
@@ -41,25 +69,39 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, ms))
+function readProcStartTime(pid: number): string | null {
+  const statPath = `/proc/${pid}/stat`
+  try {
+    const raw = fs.readFileSync(statPath, 'utf8')
+    const closeParen = raw.lastIndexOf(')')
+    if (closeParen < 0) return null
+    const fields = raw.slice(closeParen + 2).trim().split(/\s+/)
+    return fields[19] ?? null // Field 22 (1-based) in /proc/<pid>/stat is starttime
+  } catch {
+    return null
+  }
 }
 
-async function findFreePort(preferred?: number): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const srv = net.createServer()
-    srv.unref()
-    srv.on('error', err => reject(err))
-    srv.listen(preferred ?? 0, '127.0.0.1', () => {
-      const addr = srv.address()
-      if (!addr || typeof addr === 'string') {
-        srv.close(() => reject(new Error('Could not resolve listening address')))
-        return
+function matchesProcessIdentity(pid: number, expectedStartTime: string | null | undefined, expectedCmdToken?: string): boolean {
+  if (!isPidAlive(pid)) return false
+  if (fs.existsSync('/proc')) {
+    if (!expectedStartTime) return false
+    const actualStart = readProcStartTime(pid)
+    if (!actualStart || actualStart !== expectedStartTime) return false
+    if (expectedCmdToken) {
+      try {
+        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ')
+        if (!cmdline.includes(expectedCmdToken)) return false
+      } catch {
+        return false
       }
-      const chosen = addr.port
-      srv.close(closeErr => (closeErr ? reject(closeErr) : resolve(chosen)))
-    })
-  })
+    }
+  }
+  return true
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function findChromiumBinary(): string {
@@ -91,15 +133,18 @@ function findChromiumBinary(): string {
   throw new Error('No Chromium/Chrome binary found. Set CHROME_BIN or install chromium-browser.')
 }
 
-async function checkServerReady(url: string): Promise<{ ok: boolean; reason?: string }> {
+async function checkServerReady(url: string, timeoutMs = 3_000): Promise<{ ok: boolean; reason?: string }> {
+  const boundedMs = Math.max(150, timeoutMs)
   try {
-    const rootRes = await fetch(`${url}/`)
+    const rootSignal = AbortSignal.timeout(boundedMs)
+    const rootRes = await fetch(`${url}/`, { signal: rootSignal })
     if (!rootRes.ok) return { ok: false, reason: `GET / returned HTTP ${rootRes.status}` }
     const html = await rootRes.text()
     if (!html.includes('id="app"') || !html.includes('/src/entry.ts')) {
       return { ok: false, reason: 'GET / HTML does not match HPC4 Hub index.html' }
     }
-    const modRes = await fetch(`${url}/src/catalog.ts`)
+    const modSignal = AbortSignal.timeout(boundedMs)
+    const modRes = await fetch(`${url}/src/catalog.ts`, { signal: modSignal })
     if (!modRes.ok) return { ok: false, reason: `GET /src/catalog.ts returned HTTP ${modRes.status}` }
     return { ok: true }
   } catch (err) {
@@ -108,74 +153,112 @@ async function checkServerReady(url: string): Promise<{ ok: boolean; reason?: st
 }
 
 async function cmdLaunch(runId: string, preferredPort?: number): Promise<void> {
+  if (preferredPort !== undefined && (!Number.isInteger(preferredPort) || preferredPort < 1 || preferredPort > 65535)) {
+    throw new Error(`Invalid --port '${preferredPort}'. Expected integer 1..65535.`)
+  }
   const scratchDir = scratchDirFor(runId)
+  ensureOwnedScratchDir(scratchDir)
   const instFile = instancePathFor(runId)
   if (fs.existsSync(instFile)) {
     const existing = JSON.parse(fs.readFileSync(instFile, 'utf8')) as InstanceMetadata
-    if (isPidAlive(existing.pid)) {
+    if (matchesProcessIdentity(existing.pid, existing.procStartTime, 'vite')) {
       throw new Error(
         `Run '${runId}' is already active (PID ${existing.pid} at ${existing.url}). Run cleanup first or pick a fresh --run-id.`,
       )
     }
   }
 
+  const commit = getHeadCommit()
   const viteBin = path.join(REPO_ROOT, 'node_modules', '.bin', 'vite')
   if (!fs.existsSync(viteBin)) {
     execFileSync('npm', ['ci'], { cwd: REPO_ROOT, stdio: 'inherit' })
   }
 
-  const port = await findFreePort(preferredPort)
-  fs.mkdirSync(scratchDir, { recursive: true })
   const logPath = path.join(scratchDir, 'vite.log')
-  const logFd = fs.openSync(logPath, 'w')
+  const logFd = openLogFileNoFollow(logPath)
+  const viteArgs = ['--host', '127.0.0.1', '--port', String(preferredPort ?? 0)]
+  if (preferredPort !== undefined) viteArgs.push('--strictPort')
 
-  const child = spawn(viteBin, ['--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: REPO_ROOT,
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
+  let spawnErr: Error | undefined
+  let child: ChildProcess | undefined
+  try {
+    child = spawn(viteBin, viteArgs, {
+      cwd: REPO_ROOT,
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    })
+  } finally {
+    fs.closeSync(logFd)
+  }
+  child.on('error', err => {
+    spawnErr = err
   })
-  fs.closeSync(logFd)
   child.unref()
 
-  if (!child.pid) {
-    throw new Error('Failed to spawn Vite dev server')
+  const childPid = child.pid
+  if (!childPid) {
+    throw spawnErr ?? new Error('Failed to spawn Vite dev server')
   }
+  const procStartTime = readProcStartTime(childPid)
 
-  const url = `http://127.0.0.1:${port}`
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim()
-  const meta: InstanceMetadata = {
-    runId,
-    pid: child.pid,
-    port,
-    url,
-    repoRoot: REPO_ROOT,
-    commit,
-    scratchDir,
-    startedAt: new Date().toISOString(),
-  }
-  fs.writeFileSync(instFile, `${JSON.stringify(meta, null, 2)}\n`)
+  try {
+    const deadline = Date.now() + 15_000
+    let lastReason = 'waiting for Vite Local URL banner'
+    let boundPort: number | undefined
 
-  const deadline = Date.now() + 15_000
-  let lastReason = 'starting'
-  while (Date.now() < deadline) {
-    if (!isPidAlive(child.pid)) {
-      const logTail = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
-      throw new Error(`Vite exited prematurely (PID ${child.pid}). Log:\n${logTail}`)
+    while (Date.now() < deadline) {
+      if (spawnErr) throw spawnErr
+      if (!matchesProcessIdentity(childPid, procStartTime, 'vite')) {
+        const logTail = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
+        throw new Error(`Vite exited prematurely (PID ${childPid}). Log:\n${logTail}`)
+      }
+      if (boundPort === undefined && fs.existsSync(logPath)) {
+        const logText = fs.readFileSync(logPath, 'utf8').replace(/\x1b\[[0-9;]*m/g, '')
+        const match = logText.match(/Local:\s+http:\/\/127\.0\.0\.1:(\d+)\//)
+        if (match) {
+          boundPort = Number(match[1])
+          if (preferredPort !== undefined && boundPort !== preferredPort) {
+            throw new Error(`Vite bound port ${boundPort} instead of requested ${preferredPort}`)
+          }
+        }
+      }
+      if (boundPort !== undefined) {
+        const url = `http://127.0.0.1:${boundPort}`
+        const remainingMs = deadline - Date.now()
+        if (remainingMs <= 0) break
+        const ready = await checkServerReady(url, Math.min(2_500, remainingMs))
+        if (ready.ok && matchesProcessIdentity(childPid, procStartTime, 'vite')) {
+          const meta: InstanceMetadata = {
+            runId,
+            pid: childPid,
+            procStartTime,
+            port: boundPort,
+            url,
+            repoRoot: REPO_ROOT,
+            commit,
+            scratchDir,
+            startedAt: new Date().toISOString(),
+          }
+          fs.writeFileSync(instFile, `${JSON.stringify(meta, null, 2)}\n`, { mode: 0o600 })
+          process.stdout.write(`${JSON.stringify({ status: 'ready', ...meta }, null, 2)}\n`)
+          return
+        }
+        lastReason = ready.reason ?? 'not ready'
+      }
+      await sleep(120)
     }
-    const ready = await checkServerReady(url)
-    if (ready.ok) {
-      process.stdout.write(`${JSON.stringify({ status: 'ready', ...meta }, null, 2)}\n`)
-      return
-    }
-    lastReason = ready.reason ?? 'not ready'
-    await sleep(150)
-  }
 
-  await cmdCleanup(runId)
-  throw new Error(`Timed out waiting for Vite at ${url}: ${lastReason}`)
+    throw new Error(`Timed out waiting for Vite (PID ${childPid}): ${lastReason}`)
+  } catch (err) {
+    await terminatePidTree(childPid, procStartTime, 'vite')
+    fs.rmSync(instFile, { force: true })
+    throw err
+  }
 }
 
 async function runDoctorCheck(runId: string): Promise<InstanceMetadata> {
+  const scratchDir = scratchDirFor(runId)
+  ensureOwnedScratchDir(scratchDir)
   const instFile = instancePathFor(runId)
   if (!fs.existsSync(instFile)) {
     throw new Error(`No instance metadata at ${instFile}. Did you run 'launch --run-id ${runId}'?`)
@@ -184,21 +267,27 @@ async function runDoctorCheck(runId: string): Promise<InstanceMetadata> {
   if (meta.repoRoot !== REPO_ROOT) {
     throw new Error(`Instance repoRoot mismatch: ${meta.repoRoot} !== ${REPO_ROOT}`)
   }
-  if (!isPidAlive(meta.pid)) {
-    throw new Error(`Recorded Vite PID ${meta.pid} is no longer alive`)
+  const headCommit = getHeadCommit()
+  if (meta.commit !== headCommit) {
+    throw new Error(
+      `Instance commit mismatch: server started at ${meta.commit}, current HEAD is ${headCommit}. Run cleanup and launch again.`,
+    )
   }
-  const procCmdline = `/proc/${meta.pid}/cmdline`
-  if (fs.existsSync(procCmdline)) {
-    const cmdline = fs.readFileSync(procCmdline, 'utf8').replace(/\0/g, ' ')
-    if (!cmdline.includes('vite') || !cmdline.includes(String(meta.port))) {
-      throw new Error(`PID ${meta.pid} cmdline '${cmdline}' is not our Vite server on port ${meta.port}`)
-    }
+  if (!Number.isInteger(meta.port) || meta.port < 1 || meta.port > 65535) {
+    throw new Error(`Invalid port '${String(meta.port)}' in instance metadata`)
   }
-  const ready = await checkServerReady(meta.url)
+  const canonicalUrl = `http://127.0.0.1:${meta.port}`
+  if (meta.url !== canonicalUrl) {
+    throw new Error(`Instance URL '${meta.url}' does not match loopback '${canonicalUrl}'`)
+  }
+  if (!matchesProcessIdentity(meta.pid, meta.procStartTime, 'vite')) {
+    throw new Error(`Recorded Vite PID ${meta.pid} is no longer alive or no longer matches launched process identity`)
+  }
+  const ready = await checkServerReady(canonicalUrl, 3_000)
   if (!ready.ok) {
-    throw new Error(`HTTP readiness failed at ${meta.url}: ${ready.reason}`)
+    throw new Error(`HTTP readiness failed at ${canonicalUrl}: ${ready.reason}`)
   }
-  return meta
+  return { ...meta, url: canonicalUrl }
 }
 
 async function cmdDoctor(runId: string): Promise<void> {
@@ -206,22 +295,26 @@ async function cmdDoctor(runId: string): Promise<void> {
   process.stdout.write(`${JSON.stringify({ status: 'healthy', ...meta }, null, 2)}\n`)
 }
 
-async function terminatePidTree(pid: number): Promise<void> {
-  if (!isPidAlive(pid)) return
+async function terminatePidTree(
+  pid: number,
+  expectedStartTime: string | null | undefined,
+  expectedCmdToken?: string,
+): Promise<boolean> {
+  if (!matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) return false
   try {
     process.kill(-pid, 'SIGTERM')
   } catch {
     try {
       process.kill(pid, 'SIGTERM')
     } catch {
-      return
+      return !matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)
     }
   }
   const deadline = Date.now() + 5_000
-  while (Date.now() < deadline && isPidAlive(pid)) {
+  while (Date.now() < deadline && matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
     await sleep(80)
   }
-  if (isPidAlive(pid)) {
+  if (matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
     try {
       process.kill(-pid, 'SIGKILL')
     } catch {
@@ -231,17 +324,28 @@ async function terminatePidTree(pid: number): Promise<void> {
         // already exited
       }
     }
+    const killDeadline = Date.now() + 1_500
+    while (Date.now() < killDeadline && matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+      await sleep(50)
+    }
   }
+  if (matchesProcessIdentity(pid, expectedStartTime, expectedCmdToken)) {
+    throw new Error(`Failed to terminate owned process PID ${pid}`)
+  }
+  return true
 }
 
 async function cmdCleanup(runId: string): Promise<void> {
   const scratchDir = scratchDirFor(runId)
+  if (fs.existsSync(scratchDir)) {
+    ensureOwnedScratchDir(scratchDir)
+  }
   const instFile = instancePathFor(runId)
   let stoppedPid: number | null = null
   if (fs.existsSync(instFile)) {
     const meta = JSON.parse(fs.readFileSync(instFile, 'utf8')) as InstanceMetadata
-    stoppedPid = meta.pid
-    await terminatePidTree(meta.pid)
+    const signalled = await terminatePidTree(meta.pid, meta.procStartTime, 'vite')
+    if (signalled) stoppedPid = meta.pid
   }
   fs.rmSync(scratchDir, { recursive: true, force: true })
   process.stdout.write(
@@ -253,20 +357,30 @@ class CdpSession {
   private ws: WebSocket
   private nextId = 1
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pending = new Map<number, { resolve: (val: any) => void; reject: (err: Error) => void }>()
+  private pending = new Map<number, { resolve: (val: any) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }>()
 
   private constructor(ws: WebSocket) {
     this.ws = ws
+    const rejectAllPending = (reason: string) => {
+      for (const [, entry] of this.pending) {
+        clearTimeout(entry.timer)
+        entry.reject(new Error(reason))
+      }
+      this.pending.clear()
+    }
     ws.addEventListener('message', event => {
       const msg = JSON.parse(String(event.data)) as { id?: number; result?: unknown; error?: { message: string } }
       if (msg.id !== undefined) {
         const entry = this.pending.get(msg.id)
         if (!entry) return
         this.pending.delete(msg.id)
+        clearTimeout(entry.timer)
         if (msg.error) entry.reject(new Error(msg.error.message))
         else entry.resolve(msg.result)
       }
     })
+    ws.addEventListener('close', () => rejectAllPending('CDP WebSocket closed before command settled'))
+    ws.addEventListener('error', () => rejectAllPending('CDP WebSocket encountered an error'))
   }
 
   static async connect(wsUrl: string): Promise<CdpSession> {
@@ -279,10 +393,17 @@ class CdpSession {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async send<T = any>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  async send<T = any>(method: string, params: Record<string, unknown> = {}, timeoutMs = 15_000): Promise<T> {
+    if (this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error(`CDP WebSocket is not open (method: ${method})`)
+    }
     const id = this.nextId++
     return await new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      const timer = setTimeout(() => {
+        this.pending.delete(id)
+        reject(new Error(`CDP command '${method}' timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+      this.pending.set(id, { resolve, reject, timer })
       this.ws.send(JSON.stringify({ id, method, params }))
     })
   }
@@ -329,50 +450,78 @@ class CdpSession {
   }
 }
 
+function resolveEffectiveRealPath(targetPath: string): string {
+  const abs = path.resolve(targetPath)
+  const tailSegments: string[] = []
+  let cursor = abs
+  while (!fs.existsSync(cursor)) {
+    const parent = path.dirname(cursor)
+    if (parent === cursor) break
+    tailSegments.unshift(path.basename(cursor))
+    cursor = parent
+  }
+  const realBase = fs.realpathSync(cursor)
+  return path.join(realBase, ...tailSegments)
+}
+
 async function withHeadlessPage<T>(scratchDir: string, fn: (cdp: CdpSession) => Promise<T>): Promise<T> {
   const chromeBin = findChromiumBinary()
   const profileDir = path.join(scratchDir, `chrome-profile-${Date.now()}`)
-  fs.mkdirSync(profileDir, { recursive: true })
+  fs.mkdirSync(profileDir, { mode: 0o700 })
 
-  const child = spawn(
-    chromeBin,
-    [
-      '--headless',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--window-size=1280,860',
-      `--user-data-dir=${profileDir}`,
-      '--remote-debugging-port=0',
-      'about:blank',
-    ],
-    {
-      detached: true,
-      stdio: ['ignore', 'ignore', 'pipe'],
-    },
-  )
-
-  let stderrBuf = ''
-  const wsEndpoint = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timed out starting Chromium (${chromeBin}): ${stderrBuf}`)), 12_000)
-    child.stderr!.on('data', chunk => {
-      stderrBuf += String(chunk)
-      const match = stderrBuf.match(/DevTools listening on (ws:\/\/[^\s]+)/)
-      if (match) {
-        clearTimeout(timer)
-        resolve(match[1]!)
-      }
-    })
-    child.once('exit', code => {
-      clearTimeout(timer)
-      reject(new Error(`Chromium exited prematurely with code ${String(code)}: ${stderrBuf}`))
-    })
-  })
-
+  let child: ChildProcess | undefined
+  let chromeStartTime: string | null = null
   try {
+    let stderrBuf = ''
+    let spawnError: Error | undefined
+    child = spawn(
+      chromeBin,
+      [
+        '--headless',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--window-size=1280,860',
+        `--user-data-dir=${profileDir}`,
+        '--remote-debugging-port=0',
+        'about:blank',
+      ],
+      {
+        detached: true,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      },
+    )
+    if (child.pid) chromeStartTime = readProcStartTime(child.pid)
+
+    const wsEndpoint = await new Promise<string>((resolve, reject) => {
+      child!.once('error', err => {
+        spawnError = err
+        clearTimeout(timer)
+        reject(err)
+      })
+      const timer = setTimeout(
+        () => reject(spawnError ?? new Error(`Timed out starting Chromium (${chromeBin}): ${stderrBuf}`)),
+        12_000,
+      )
+      child!.stderr!.on('data', chunk => {
+        stderrBuf += String(chunk)
+        const match = stderrBuf.match(/DevTools listening on (ws:\/\/[^\s]+)/)
+        if (match) {
+          clearTimeout(timer)
+          resolve(match[1]!)
+        }
+      })
+      child!.once('exit', code => {
+        clearTimeout(timer)
+        reject(spawnError ?? new Error(`Chromium exited prematurely with code ${String(code)}: ${stderrBuf}`))
+      })
+    })
+
     const httpPort = new URL(wsEndpoint).port
-    const targets = (await (await fetch(`http://127.0.0.1:${httpPort}/json/list`)).json()) as Array<{
+    const targets = (await (
+      await fetch(`http://127.0.0.1:${httpPort}/json/list`, { signal: AbortSignal.timeout(5_000) })
+    ).json()) as Array<{
       type: string
       webSocketDebuggerUrl: string
     }>
@@ -395,21 +544,26 @@ async function withHeadlessPage<T>(scratchDir: string, fn: (cdp: CdpSession) => 
       cdp.close()
     }
   } finally {
-    if (child.pid) await terminatePidTree(child.pid)
+    if (child?.pid) await terminatePidTree(child.pid, chromeStartTime)
     fs.rmSync(profileDir, { recursive: true, force: true })
   }
 }
 
 async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName): Promise<void> {
   const meta = await runDoctorCheck(runId)
-  const resolvedEvidence = path.resolve(evidenceDir)
-  const resolvedScratch = path.resolve(meta.scratchDir)
-  if (resolvedEvidence === resolvedScratch || resolvedEvidence.startsWith(`${resolvedScratch}${path.sep}`)) {
+  const resolvedScratch = fs.realpathSync(meta.scratchDir)
+  const resolvedEvidenceReal = resolveEffectiveRealPath(evidenceDir)
+  if (resolvedEvidenceReal === resolvedScratch || resolvedEvidenceReal.startsWith(`${resolvedScratch}${path.sep}`)) {
     throw new Error(
-      `--evidence-dir (${resolvedEvidence}) must live outside the scratch dir (${resolvedScratch}) so cleanup preserves proof artifacts.`,
+      `--evidence-dir (${resolvedEvidenceReal}) must live outside the scratch dir (${resolvedScratch}) so cleanup preserves proof artifacts.`,
     )
   }
+  const resolvedEvidence = path.resolve(evidenceDir)
   fs.mkdirSync(resolvedEvidence, { recursive: true })
+  const createdEvidenceReal = fs.realpathSync(resolvedEvidence)
+  if (createdEvidenceReal === resolvedScratch || createdEvidenceReal.startsWith(`${resolvedScratch}${path.sep}`)) {
+    throw new Error(`Resolved --evidence-dir (${createdEvidenceReal}) points inside scratch (${resolvedScratch}).`)
+  }
 
   const summary: Record<string, unknown> = {
     runId,
@@ -556,15 +710,41 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
       if (reducedSnap.fillTransform !== 'scaleX(1)') {
         throw new Error(`Reduced motion did not settle immediately to scaleX(1): got '${reducedSnap.fillTransform}'`)
       }
+      if (!reducedSnap.savedStorage) {
+        throw new Error('Expected hpc4:learning:v1 bookmark in localStorage, got null')
+      }
+      const parsedBookmark = JSON.parse(reducedSnap.savedStorage) as {
+        last?: string
+        lessons?: Record<string, { beat?: number; total?: number; completed?: boolean }>
+      }
+      if (parsedBookmark.last !== 'host-to-gpu' || parsedBookmark.lessons?.['host-to-gpu']?.beat !== 3) {
+        throw new Error(`Unexpected hpc4:learning:v1 bookmark payload: ${reducedSnap.savedStorage}`)
+      }
       await cdp.send('Emulation.setEmulatedMedia', {
         features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
       })
 
+      // Navigate to #atlas, perform a full page reload to drop in-memory state, and verify #resume-slot restores lesson + step
       await cdp.evalJson(`document.querySelector('[data-route="#atlas"]').click()`)
-      await cdp.waitFor(`location.hash === '#atlas' && !document.getElementById('resume-slot').hidden`)
+      await cdp.waitFor(`location.hash === '#atlas' && !document.getElementById('resume-slot')?.hidden`)
+      await cdp.evalJson(`window.__beforeReload = true`)
+      await cdp.send('Page.reload', { ignoreCache: false })
+      await cdp.waitFor(
+        `!window.__beforeReload && location.hash === '#atlas' && document.querySelector('#resume-slot .resume-card') !== null && !document.getElementById('resume-slot').hidden`,
+      )
       const resumeSlotText = await cdp.evalJson<string>(`return document.getElementById('resume-slot').textContent.replace(/\\s+/g, ' ').trim()`)
+      await cdp.evalJson(`document.querySelector('#resume-slot .resume-card').click()`)
+      await cdp.waitFor(
+        `location.hash === '#lesson/host-to-gpu' && document.querySelectorAll('.stage-step-btn')[3]?.getAttribute('aria-current') === 'step'`,
+      )
+      const resumedStepIdx = await cdp.evalJson<number>(
+        `return [...document.querySelectorAll('.stage-step-btn')].findIndex(b => b.getAttribute('aria-current') === 'step')`,
+      )
+      if (resumedStepIdx !== 3) {
+        throw new Error(`Expected #resume-slot to restore stepIdx 3, got ${resumedStepIdx}`)
+      }
 
-      checks.stageScenario = { afterEscape, reducedSnap, resumeSlotText }
+      checks.stageScenario = { afterEscape, reducedSnap, resumeSlotText, resumedStepIdx }
     }
 
     if (journey === 'all' || journey === 'practice') {
@@ -586,14 +766,25 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
           stored: localStorage.getItem('hpc4-hub.practice.act1'),
         };
       `)
+      if (!practiceProof.stored) {
+        throw new Error('Expected hpc4-hub.practice.act1 in localStorage after completing Mission 01, got null')
+      }
+      const parsedPractice = JSON.parse(practiceProof.stored) as { completed?: number[]; cards?: string[] }
+      if (!parsedPractice.completed?.includes(1) || !parsedPractice.cards?.includes('dotfiles')) {
+        throw new Error(`Unexpected hpc4-hub.practice.act1 payload: ${practiceProof.stored}`)
+      }
 
+      // Navigate to #atlas/concept/dotfiles and reload the page so Practiced ✓ must come from persisted storage rather than an in-memory PracticeDesk
       await cdp.send('Page.navigate', { url: `${meta.url}/#atlas/concept/dotfiles` })
-      await cdp.waitFor(`document.querySelector('.concept-sheet')?.textContent?.includes('Practiced')`)
+      await cdp.waitFor(`location.hash === '#atlas/concept/dotfiles' && document.querySelector('.concept-sheet') !== null`)
+      await cdp.evalJson(`window.__beforeReload = true`)
+      await cdp.send('Page.reload', { ignoreCache: false })
+      await cdp.waitFor(`!window.__beforeReload && document.querySelector('.concept-sheet .status-pill.is-done')?.textContent?.includes('Practiced') === true`)
       const conceptPracticed = await cdp.evalJson<boolean>(
         `return document.querySelector('.concept-sheet .status-pill.is-done')?.textContent?.includes('Practiced') === true`,
       )
       if (!conceptPracticed) {
-        throw new Error('Awarded card dotfiles did not display Practiced pill on #atlas/concept/dotfiles')
+        throw new Error('Awarded card dotfiles did not display Practiced pill after reloading #atlas/concept/dotfiles')
       }
       checks.practiceWorkstation = { ...practiceProof, conceptPracticed }
     }

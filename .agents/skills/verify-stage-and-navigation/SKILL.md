@@ -18,7 +18,7 @@ npm test
 
 ## Code and step boundaries
 
-Sync commit: `2b0c6c8c493a3fc1cc4fc2411d0c2d1edf099dbf` (plus `pruneTrailForDestination` in `src/catalog.ts` and `src/main.ts`).
+Sync commit: `cb52c96b6d7dd3b0e6fbce4385b9f95b4e409a65`.
 
 ### 1. `formal/StageRunner/` → `src/stage/runner.ts` & `src/stage/player.ts`
 
@@ -40,7 +40,7 @@ Bounds and scope: 3 steps (`0..2`), discrete beat `{0, 1, 2}`, discrete dwell `{
 | `NavigateTo`, `ApplyRoute` | `navigateTo`, `applyParsedRoute`, `stopActiveLesson`, and `ensureLessonMounted` in `src/main.ts`; `pushTrail` and `pruneTrailForDestination` in `src/catalog.ts`. |
 | `SelectWorkbenchSubject` | In-place `history.replaceState` transitions in `src/main.ts` (`dispatchScene` with `select`/`cluster-select` and `[data-atlas-mode]` toggles) that call `pruneTrailForDestination(trail, nextHash)`. |
 | `ThinkBack` | `#think-back` click handler in `src/main.ts` using `popTrail(trail)` with `recordTrail: false` and `fallbackBackTarget(currentRoute, state)` when `trail` is empty. |
-| `ResolveCurrentLoad`, `ResolveStaleLoad` | Dynamic `await lessonLoaders[lessonId]()` in `ensureLessonMounted` (`src/main.ts`), guarded by `token !== lessonLoadToken || currentRoute.view !== 'lesson' || currentRoute.lesson !== lessonId`. |
+| `ResolveCurrentLoad`, `ResolveStaleLoad` | Dynamic `await lessonLoaders[lessonId]()` in `ensureLessonMounted` (`src/main.ts`), guarded by `token !== lessonLoadToken \|\| currentRoute.view !== 'lesson' \|\| currentRoute.lesson !== lessonId`. |
 | `OpenSearch`, `OpenEvidence`, `OpenDrawer`, `SwitchViaSearch` | `openSwitcher` (`Ctrl+K`, `<dialog#switcher>`), `openEvidence` (`<dialog#evidence-dialog>`), and `#menu-button` (`.navigation-open` drawer) in `src/main.ts` and `src/platform/search.ts`, each calling `activeLesson?.mounted.pause()`. |
 | `StartStageAutoplay`, `EnterStageInspect`, `PinStagePart`, `PressEscape` | Layered `Escape` handling across `switcher` (`stopPropagation`), `evidence-dialog` (`stopPropagation`), `#sidebar` (`preventDefault` before `closeNavigation`), and `src/stage/player.ts` (`pinnedPart` unpin before `toggle-inspect`). |
 
