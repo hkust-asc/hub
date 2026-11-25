@@ -66,6 +66,18 @@ let renderedResumeKey = ''
 let renderedTransitionKey = ''
 let activeLesson: { id: LessonId; mounted: MountedStageScenario } | null = null
 let lessonLoadToken = 0
+let viewsModule: typeof import('./platform/views') | null = null
+let viewsPromise: Promise<typeof import('./platform/views')> | undefined
+
+function loadViews(): Promise<typeof import('./platform/views')> {
+  return (viewsPromise ??= import('./platform/views').then(mod => {
+    viewsModule = mod
+    return mod
+  }).catch(error => {
+    viewsPromise = undefined
+    throw error
+  }))
+}
 
 const learning = new LearningProgress(browserStorage())
 const savedLessons = learning.lessons
@@ -135,7 +147,9 @@ async function ensureLessonMounted(lessonId: LessonId, requestedStep?: number): 
   const returnLink = backTarget
     ? { route: backTarget.route, label: backTarget.label }
     : { route: '#learn', label: 'Walkthroughs' }
-  const completedMissions = new Set(progressStore(browserStorage()).state.completed)
+  const completedMissions = new Set(
+    viewsModule ? viewsModule.completedPracticeMissions() : progressStore(browserStorage()).state.completed,
+  )
   const continuation = lessonContinuation(lessonId, { completedMissions })
   const mounted = mountStageScenario(lesson, {
     container,
@@ -412,7 +426,7 @@ function render(): void {
       : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops') : getEntry(page.id)!.title
     breadcrumb = page.view === 'concept' ? `Atlas / ${getCategory(getEntry(page.id)!.category).shortName}` : mode[0].toUpperCase() + mode.slice(1)
     platform.textContent = 'Loading…'
-    void import('./platform/views').then(({ showPage }) => {
+    void loadViews().then(({ showPage }) => {
       if (currentRoute === page) showPage(platform, page, learning)
     }).catch(error => {
       console.error('Could not open learning mode', error)

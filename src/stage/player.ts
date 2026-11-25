@@ -355,6 +355,8 @@ export function mountStageScenario<VariantId extends string = string>(
 
   function syncControls(hasCameraZoom: boolean): void {
     const maxIdx = steps.length - 1
+    const activeEl = document.activeElement
+    let focusTarget: HTMLElement | null = null
     const railNav = describeStageRailNav({
       steps,
       stepIndex: state.stepIndex,
@@ -366,6 +368,7 @@ export function mountStageScenario<VariantId extends string = string>(
     prevBtn.title = railNav.prevStepLabel ? `Previous: ${railNav.prevStepLabel} (←)` : 'First step'
 
     if (railNav.primaryContinuation) {
+      if (activeEl === nextBtn) focusTarget = transportContinueLink
       nextBtn.hidden = true
       transportContinueLink.hidden = false
       transportContinueLink.href = railNav.primaryContinuation.route
@@ -373,6 +376,7 @@ export function mountStageScenario<VariantId extends string = string>(
       transportContinueLabel.textContent = railNav.primaryContinuation.label
       transportContinueLink.title = railNav.primaryContinuation.label
     } else {
+      if (activeEl === transportContinueLink && !railNav.isFinalStep) focusTarget = nextBtn
       nextBtn.hidden = false
       nextBtn.disabled = railNav.isFinalStep
       nextBtn.title = railNav.nextStepLabel ? `Next: ${railNav.nextStepLabel} (→)` : 'Final step'
@@ -380,6 +384,7 @@ export function mountStageScenario<VariantId extends string = string>(
     }
 
     if (railNav.returnLink) {
+      if (activeEl === railPrevBtn) focusTarget = railReturnLink
       railReturnLink.hidden = false
       railReturnLink.href = railNav.returnLink.route
       railReturnLink.dataset.route = railNav.returnLink.route
@@ -387,6 +392,7 @@ export function mountStageScenario<VariantId extends string = string>(
       railReturnLink.title = `Back to ${railNav.returnLink.label}`
       railPrevBtn.hidden = true
     } else {
+      if (activeEl === railReturnLink && !railNav.isFirstStep) focusTarget = railPrevBtn
       railReturnLink.hidden = true
       railPrevBtn.hidden = false
       railPrevBtn.disabled = railNav.isFirstStep
@@ -398,6 +404,7 @@ export function mountStageScenario<VariantId extends string = string>(
     }
 
     if (railNav.primaryContinuation) {
+      if (activeEl === railNextBtn) focusTarget = railContinueLink
       railNextBtn.hidden = true
       railContinueLink.hidden = false
       railContinueLink.href = railNav.primaryContinuation.route
@@ -406,6 +413,7 @@ export function mountStageScenario<VariantId extends string = string>(
       railContinueLabel.textContent = railNav.primaryContinuation.label
       railContinueLink.setAttribute('aria-label', railNav.primaryContinuation.label)
     } else {
+      if (activeEl === railContinueLink && !railNav.isFinalStep) focusTarget = railNextBtn
       railContinueLink.hidden = true
       railNextBtn.hidden = false
       railNextBtn.disabled = railNav.isFinalStep
@@ -414,6 +422,8 @@ export function mountStageScenario<VariantId extends string = string>(
       railNextBtn.title = railNav.nextStepLabel ? `${nextLabelText} (→)` : 'Final step'
       railNextBtn.setAttribute('aria-label', nextLabelText)
     }
+
+    focusTarget?.focus({ preventScroll: true })
 
     const showSecondary = railNav.secondaryContinuation.length > 0
     railUpnextEl.hidden = !showSecondary && !railNav.primaryContinuation
@@ -533,8 +543,13 @@ export function mountStageScenario<VariantId extends string = string>(
   fitBtn.addEventListener('click', () => dispatch({ type: 'toggle-fit' }), { signal })
   inspectBtn.addEventListener('click', () => dispatch({ type: 'toggle-inspect' }), { signal })
   stageCueBtn.addEventListener('click', () => {
+    const wasInspecting = state.inspecting
     if (pinnedPart) clearPin()
     dispatch({ type: 'toggle-inspect' })
+    if (!wasInspecting && state.inspecting) {
+      const firstVisiblePart = partEls.find(el => !el.closest('[hidden]'))
+      firstVisiblePart?.focus({ preventScroll: true })
+    }
   }, { signal })
   popCloseBtn.addEventListener('click', () => clearPin(), { signal })
 

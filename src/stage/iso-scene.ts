@@ -187,10 +187,15 @@ export function createIsoStageScene<VariantId extends string = string>(
           slot.group.setAttribute('hidden', '')
           continue
         }
+        const geom = computeSpotlightGeometry(rawBox, currentViewBox, 6, 2)
+        if (!geom) {
+          slot.group.setAttribute('hidden', '')
+          slot.group.classList.remove('is-pulsing')
+          continue
+        }
         slot.group.removeAttribute('hidden')
         const tone = sp.tone ?? 'blue'
         if (slot.group.dataset.tone !== tone) slot.group.dataset.tone = tone
-        const geom = computeSpotlightGeometry(rawBox, currentViewBox, 6, 2)
         slot.halo.setAttribute('x', String(geom.halo.x))
         slot.halo.setAttribute('y', String(geom.halo.y))
         slot.halo.setAttribute('width', String(geom.halo.w))

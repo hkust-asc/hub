@@ -122,6 +122,7 @@ test('spotlight halos stay strictly inside SVG viewBox bounds across every scena
           const eState = frame.entities[entity.id as keyof typeof frame.entities]
           if (eState?.hidden || !eState?.emphasis) continue
           const geom = computeSpotlightGeometry(worldBoxes[entity.id], cam.rect, 4, 1.5)
+          assert.ok(geom, `${spec.id} [${mode}/step ${step}/${entity.id}] missing spotlight geometry`)
           assert.ok(
             geom.halo.x >= cam.rect.x + 1.5 &&
             geom.halo.y >= cam.rect.y + 1.5 &&
@@ -137,10 +138,22 @@ test('spotlight halos stay strictly inside SVG viewBox bounds across every scena
 
   // Edge-hugging box clamps strictly within bounds
   const edge = computeSpotlightGeometry({ x: 0, y: 0, w: 380, h: 410 }, { x: 0, y: 0, w: 380, h: 410 }, 6, 1.5)
+  assert.ok(edge)
   assert.equal(edge.halo.x, 1.5)
   assert.equal(edge.halo.y, 1.5)
   assert.equal(edge.halo.x + edge.halo.w, 378.5)
   assert.equal(edge.halo.y + edge.halo.h, 408.5)
+
+  // Targets with no visible intersection inside inset bounds are hidden (return null)
+  assert.equal(computeSpotlightGeometry({ x: 99, y: 20, w: 1, h: 20 }, { x: 0, y: 0, w: 100, h: 100 }, 4, 1.5), null)
+  assert.equal(computeSpotlightGeometry({ x: 120, y: 20, w: 10, h: 20 }, { x: 0, y: 0, w: 100, h: 100 }, 4, 1.5), null)
+
+  // Narrow near-edge targets clamp their minimum-sized halo inside the inset boundary
+  const narrow = computeSpotlightGeometry({ x: 97, y: 20, w: 1, h: 20 }, { x: 0, y: 0, w: 100, h: 100 }, 0, 1.5)
+  assert.ok(narrow)
+  assert.equal(narrow.halo.x, 94.5)
+  assert.equal(narrow.halo.w, 4)
+  assert.equal(narrow.halo.x + narrow.halo.w, 98.5)
 })
 
 test('interactive cues and Practice mission navigation reflect inspect state and mission unlock progression', () => {

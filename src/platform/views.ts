@@ -4,9 +4,11 @@ import { renderGlyph } from '../glyphs.ts'
 import { clusterTopics, topics } from '../model.ts'
 import { Game } from '../practice/engine/game.ts'
 import { levels } from '../practice/engine/levels/index.ts'
+import { progressStore } from '../practice/engine/storage.ts'
 import { PracticeDesk } from '../practice/workstation.ts'
 import { codex, conceptForAward } from './codex.ts'
 import { weeks } from './curriculum.ts'
+import type { WorkshopWeek } from './curriculum.ts'
 import { conceptNeighbors, conceptsForLesson, escapeHtml as esc, lessonLinks, link } from './links.ts'
 import { browserStorage } from './progress.ts'
 import type { LearningProgress } from './progress.ts'
@@ -14,6 +16,12 @@ import type { LearningProgress } from './progress.ts'
 type Page = Extract<ParsedRoute, { view: 'learn' | 'practice' | 'weeks' | 'concept' }>
 let practice: PracticeDesk | undefined
 function desk() { return practice ??= new PracticeDesk(new Game(browserStorage())) }
+
+export function completedPracticeMissions(): readonly number[] {
+  return practice
+    ? [...practice.game.store.state.completed]
+    : progressStore(browserStorage()).state.completed
+}
 
 function learn(progress: LearningProgress) {
   const groups = [...categories].sort((a, b) => Number(b.id === 'linux') - Number(a.id === 'linux'))
@@ -76,24 +84,13 @@ export function renderConceptSheet(e: EntryDef, practicedCards: readonly string[
   </article>`
 }
 
-export function renderWeekView(
-  id: string | undefined,
+type WeekStageNum = '01' | '02' | '03' | '04'
+
+function computeWeekProgression(
+  w: WorkshopWeek,
   progress: LearningProgress,
   gameInstance: Pick<Game, 'isComplete' | 'isUnlocked' | 'store'>,
 ) {
-  if (!id) {
-    return `<p class="mode-intro">The visual guide and browser drills accompany the weekly workshops. Field instructions and submissions stay in the workshop repository.</p>
-    <div class="mode-grid">${weeks.map(w => {
-      const lDone = w.lessons.filter(lid => progress.lessons.get(lid)?.completed).length
-      const mDone = w.missions.filter(mid => gameInstance.isComplete(mid)).length
-      const qDone = w.quests.filter(q => progress.checked.has(`${w.id}/${q.id}`)).length
-      return `<article class="mode-card" data-tone="amber"><div class="mode-card-top"><span class="mode-meta">Workshop · 01 → 04 flow</span><span class="status-pill${lDone === w.lessons.length && mDone === w.missions.length && qDone === w.quests.length ? ' is-done' : ''}">${lDone}/${w.lessons.length} learn · ${mDone}/${w.missions.length} practice · ${qDone}/${w.quests.length} quests</span></div>
-      <h2>${link(`#weeks/${w.id}`, w.title)}</h2><p>${esc(w.description)}</p></article>`
-    }).join('')}</div>
-    <p class="mode-note">Future topics: software &amp; Slurm, then GPU execution &amp; profiling. No field briefs are published here yet for these topics.</p>`
-  }
-
-  const w = weeks.find(w => w.id === id)!
   const lessonsDone = w.lessons.filter(lid => progress.lessons.get(lid)?.completed).length
   const missionsDone = w.missions.filter(mid => gameInstance.isComplete(mid)).length
   const questsDone = w.quests.filter(q => progress.checked.has(`${w.id}/${q.id}`)).length
@@ -103,7 +100,7 @@ export function renderWeekView(
   const nextLessonId = w.lessons.find(lid => !progress.lessons.get(lid)?.completed)
   const nextMissionId = w.missions.find(mid => !gameInstance.isComplete(mid) && gameInstance.isUnlocked(mid))
     ?? w.missions.find(mid => !gameInstance.isComplete(mid))
-  const activeStage: '01' | '02' | '03' | '04' = nextLessonId
+  const activeStage: WeekStageNum = nextLessonId
     ? '01'
     : nextMissionId
       ? '02'
@@ -147,21 +144,68 @@ export function renderWeekView(
   })()
 
   const stages = [
-    { num: '01', name: 'Learn', count: `${lessonsDone}/${w.lessons.length}`, done: lessonsDone === w.lessons.length },
-    { num: '02', name: 'Practice', count: `${missionsDone}/${w.missions.length}`, done: missionsDone === w.missions.length },
-    { num: '03', name: 'Field quests', count: `${questsDone}/${w.quests.length}`, done: questsDone === w.quests.length },
-    { num: '04', name: 'Atlas', count: `${conceptsPracticed}/${w.concepts.length}`, done: conceptsPracticed === w.concepts.length },
+    { num: '01' as const, name: 'Learn', count: `${lessonsDone}/${w.lessons.length}`, done: lessonsDone === w.lessons.length },
+    { num: '02' as const, name: 'Practice', count: `${missionsDone}/${w.missions.length}`, done: missionsDone === w.missions.length },
+    { num: '03' as const, name: 'Field quests', count: `${questsDone}/${w.quests.length}`, done: questsDone === w.quests.length },
+    { num: '04' as const, name: 'Atlas', count: `${conceptsPracticed}/${w.concepts.length}`, done: conceptsPracticed === w.concepts.length },
   ] as const
 
-  const nextActionHtml = recommended.external
+  return {
+    lessonsDone,
+    missionsDone,
+    questsDone,
+    practicedSet,
+    conceptsPracticed,
+    nextLessonId,
+    nextMissionId,
+    activeStage,
+    recommended,
+    stages,
+  }
+}
+
+function renderWeekNextAction(recommended: { route: string; label: string; external: boolean }): string {
+  return recommended.external
     ? `<a class="mode-link is-primary-link" data-week-next href="${esc(recommended.route)}" target="_blank" rel="noopener noreferrer">${esc(recommended.label)}</a>`
     : `<a class="mode-link is-primary-link" data-week-next data-route="${esc(recommended.route)}" href="${esc(recommended.route)}">${esc(recommended.label)}</a>`
+}
+
+export function renderWeekView(
+  id: string | undefined,
+  progress: LearningProgress,
+  gameInstance: Pick<Game, 'isComplete' | 'isUnlocked' | 'store'>,
+) {
+  if (!id) {
+    return `<p class="mode-intro">The visual guide and browser drills accompany the weekly workshops. Field instructions and submissions stay in the workshop repository.</p>
+    <div class="mode-grid">${weeks.map(w => {
+      const lDone = w.lessons.filter(lid => progress.lessons.get(lid)?.completed).length
+      const mDone = w.missions.filter(mid => gameInstance.isComplete(mid)).length
+      const qDone = w.quests.filter(q => progress.checked.has(`${w.id}/${q.id}`)).length
+      return `<article class="mode-card" data-tone="amber"><div class="mode-card-top"><span class="mode-meta">Workshop · 01 → 04 flow</span><span class="status-pill${lDone === w.lessons.length && mDone === w.missions.length && qDone === w.quests.length ? ' is-done' : ''}">${lDone}/${w.lessons.length} learn · ${mDone}/${w.missions.length} practice · ${qDone}/${w.quests.length} quests</span></div>
+      <h2>${link(`#weeks/${w.id}`, w.title)}</h2><p>${esc(w.description)}</p></article>`
+    }).join('')}</div>
+    <p class="mode-note">Future topics: software &amp; Slurm, then GPU execution &amp; profiling. No field briefs are published here yet for these topics.</p>`
+  }
+
+  const w = weeks.find(w => w.id === id)!
+  const {
+    lessonsDone,
+    missionsDone,
+    questsDone,
+    practicedSet,
+    conceptsPracticed,
+    nextLessonId,
+    nextMissionId,
+    activeStage,
+    recommended,
+    stages,
+  } = computeWeekProgression(w, progress, gameInstance)
 
   return `<nav class="week-top-bar" aria-label="Workshop navigation">
       <a class="mode-link" data-route="#weeks" href="#weeks">← All weeks</a>
       <div class="week-recommended">
         <span class="week-rec-label">Recommended next</span>
-        ${nextActionHtml}
+        ${renderWeekNextAction(recommended)}
       </div>
     </nav>
     <p class="mode-intro">${esc(w.description)}</p>
@@ -175,7 +219,7 @@ export function renderWeekView(
         ${idx < stages.length - 1 ? '<span class="week-step-arrow" aria-hidden="true">→</span>' : ''}
       `).join('')}
     </div>
-    <section class="mode-panel step-panel${activeStage === '01' ? ' is-recommended-stage' : ''}" data-tone="blue">
+    <section class="mode-panel step-panel${activeStage === '01' ? ' is-recommended-stage' : ''}" data-week-panel="01" data-tone="blue">
       <div class="mode-card-top"><span class="step-kicker">01 / Learn</span><span class="status-pill${lessonsDone === w.lessons.length ? ' is-done' : ''}">${lessonsDone} / ${w.lessons.length} completed</span></div>
       <h2>See what the commands do</h2>
       <div class="week-item-list">${w.lessons.map(lid => {
@@ -198,7 +242,7 @@ export function renderWeekView(
         </a>`
       }).join('')}</div>
     </section>
-    <section class="mode-panel step-panel${activeStage === '02' ? ' is-recommended-stage' : ''}" data-tone="green">
+    <section class="mode-panel step-panel${activeStage === '02' ? ' is-recommended-stage' : ''}" data-week-panel="02" data-tone="green">
       <div class="mode-card-top"><span class="step-kicker">02 / Practice</span><span class="status-pill${missionsDone === w.missions.length ? ' is-done' : ''}">${missionsDone} / ${w.missions.length} completed</span></div>
       <h2>Rehearse in the browser</h2>
       <div class="week-item-list">${w.missions.map(mid => {
@@ -219,7 +263,7 @@ export function renderWeekView(
         </a>`
       }).join('')}</div>
     </section>
-    <section class="mode-panel step-panel${activeStage === '03' ? ' is-recommended-stage' : ''}" data-tone="amber"><div class="mode-card-top"><span class="step-kicker">03 / Field quests</span><span id="week-count" class="status-pill${questsDone === w.quests.length ? ' is-done' : ''}" role="status">${questsDone} / ${w.quests.length} marked done</span></div><h2>On the training server</h2>
+    <section class="mode-panel step-panel${activeStage === '03' ? ' is-recommended-stage' : ''}" data-week-panel="03" data-tone="amber"><div class="mode-card-top"><span class="step-kicker">03 / Field quests</span><span id="week-count" class="status-pill${questsDone === w.quests.length ? ' is-done' : ''}" role="status">${questsDone} / ${w.quests.length} marked done</span></div><h2>On the training server</h2>
     <p>Use the <a href="${w.source}" class="external-brief">official workshop brief</a> for connection details, host keys and submission rules. These checkboxes are your own notes, not graded submissions.</p>
     ${w.quests.map(q => {
       const key = `${w.id}/${q.id}`
@@ -228,7 +272,7 @@ export function renderWeekView(
         <p>${esc(q.detail)}</p><div class="field-example"><code>${esc(q.example)}</code><button type="button" data-copy>Copy example</button></div>
         <a class="external-brief" href="${w.source}#${q.anchor}">Field instructions ↗</a></div>`
     }).join('')}<div role="status" id="copy-status"></div></section>
-    <section class="mode-panel step-panel${activeStage === '04' ? ' is-recommended-stage' : ''}" data-tone="slate">
+    <section class="mode-panel step-panel${activeStage === '04' ? ' is-recommended-stage' : ''}" data-week-panel="04" data-tone="slate">
       <div class="mode-card-top"><span class="step-kicker">04 / Atlas</span><span class="status-pill${conceptsPracticed === w.concepts.length ? ' is-done' : ''}">${conceptsPracticed} / ${w.concepts.length} practiced</span></div>
       <h2>Keep for reference</h2>
       <div class="week-item-list">${w.concepts.map(cid => {
@@ -256,18 +300,41 @@ export function showPage(host: HTMLElement, route: Page, progress: LearningProgr
       ? renderConceptSheet(getEntry(route.id)!, d.game.store.state.cards)
       : renderWeekView(route.week, progress, d.game)
   if (route.view !== 'weeks' || !route.week) return
+  const week = weeks.find(w => w.id === route.week)!
   const checks = [...host.querySelectorAll<HTMLInputElement>('[data-quest]')]
   for (const box of checks) box.onchange = () => {
     progress.checkQuest(box.dataset.quest!, box.checked)
     box.closest('.field-quest')?.classList.toggle('is-done', box.checked)
-    const doneCount = checks.filter(b => b.checked).length
+    const state = computeWeekProgression(week, progress, d.game)
     const countEl = host.querySelector('#week-count')!
-    countEl.textContent = `${doneCount} / ${checks.length} marked done`
-    countEl.classList.toggle('is-done', doneCount === checks.length)
-    const stageCount = host.querySelector('[data-stage-count="03"]')
-    if (stageCount) {
-      stageCount.textContent = doneCount === checks.length ? `${doneCount}/${checks.length} ✓` : `${doneCount}/${checks.length}`
-      stageCount.closest('.week-step-pill')?.classList.toggle('is-done', doneCount === checks.length)
+    countEl.textContent = `${state.questsDone} / ${week.quests.length} marked done`
+    countEl.classList.toggle('is-done', state.questsDone === week.quests.length)
+
+    for (const st of state.stages) {
+      const pill = host.querySelector<HTMLElement>(`[data-week-stage="${st.num}"]`)
+      if (pill) {
+        pill.classList.toggle('is-done', st.done)
+        pill.classList.toggle('is-current', state.activeStage === st.num)
+      }
+      const stageCount = host.querySelector(`[data-stage-count="${st.num}"]`)
+      if (stageCount) stageCount.textContent = st.done ? `${st.count} ✓` : st.count
+      const panelEl = host.querySelector<HTMLElement>(`[data-week-panel="${st.num}"]`)
+      if (panelEl) panelEl.classList.toggle('is-recommended-stage', state.activeStage === st.num)
+    }
+
+    const nextLink = host.querySelector<HTMLAnchorElement>('[data-week-next]')
+    if (nextLink) {
+      nextLink.href = state.recommended.route
+      nextLink.textContent = state.recommended.label
+      if (state.recommended.external) {
+        nextLink.removeAttribute('data-route')
+        nextLink.target = '_blank'
+        nextLink.rel = 'noopener noreferrer'
+      } else {
+        nextLink.dataset.route = state.recommended.route
+        nextLink.removeAttribute('target')
+        nextLink.removeAttribute('rel')
+      }
     }
   }
   for (const btn of host.querySelectorAll<HTMLButtonElement>('[data-copy]')) btn.onclick = async () => {

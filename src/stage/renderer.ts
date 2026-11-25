@@ -906,6 +906,11 @@ export function createSchematicStageScene<
         4,
         1.5,
       )
+      if (!geom) {
+        spSlot.group.setAttribute('hidden', '')
+        spSlot.group.classList.remove('is-pulsing')
+        continue
+      }
       spSlot.halo.setAttribute('x', String(geom.halo.x))
       spSlot.halo.setAttribute('y', String(geom.halo.y))
       spSlot.halo.setAttribute('width', String(geom.halo.w))

@@ -181,7 +181,7 @@ select:focus-visible { outline: 2px solid var(--gpu); outline-offset: 3px; }
 .part:hover .solid { stroke: #5375bd70; }
 .part.is-selected { filter: drop-shadow(0 0 3px #5375bd90) drop-shadow(0 5px 10px #456bad24); }
 .part.is-selected .solid { stroke: #5375bd95; }
-.part:focus-visible { outline: none; filter: drop-shadow(0 0 0 2px #5375bd) drop-shadow(0 4px 8px #5375bd45); }
+.part:focus-visible { outline: none; filter: drop-shadow(0 0 2px #3d5c9e) drop-shadow(0 4px 8px #5375bd55); }
 .part:focus-visible .solid { stroke: #3d5c9e; }
 .is-exploded .part { transform: translateY(var(--lift)); }
 .is-exploded .part:hover { transform: translateY(calc(var(--lift) - 2px)); }
@@ -222,7 +222,10 @@ dialog h3 { font-size: 12px; font-weight: 500; margin-top: 24px; }
 .cluster-part { cursor: pointer; transition: transform .2s ease, filter .2s ease; }
 .cluster-part:hover { transform: translateY(-2px); filter: drop-shadow(0 3px 7px #5375bd42); }
 .cluster-part:hover .cluster-part-name { fill: #3d5c9e; }
-.cluster-part:focus-visible { transform: translateY(-2px); filter: drop-shadow(0 0 0 2px #5375bd) drop-shadow(0 3px 8px #5375bd45); outline: none; }
+.cluster-part:focus-visible { transform: translateY(-2px); filter: drop-shadow(0 0 2px #3d5c9e) drop-shadow(0 3px 8px #5375bd55); outline: none; }
+.cluster-part:focus-visible > g .solid { stroke: #3d5c9e; }
+.cluster-part:focus-visible .cluster-part-name { fill: #3d5c9e; }
+.fabric-subject:focus-visible rect { stroke: #3d5c9e; stroke-width: 1.8; }
 .cluster-part.is-selected { filter: drop-shadow(0 3px 8px #5375bd38); }
 .cluster-part.is-selected > g .solid { stroke: #5375bd; }
 .cluster-part.is-selected .cluster-part-name { fill: #3d5c9e; font-weight: 600; }

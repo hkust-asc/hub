@@ -276,14 +276,47 @@ export function computeSpotlightGeometry(
   bounds: ViewBoxRect,
   pad = 4,
   inset = 1.5,
-): SpotlightGeometry {
-  const minX = round(Math.max(bounds.x + inset, box.x - pad))
-  const minY = round(Math.max(bounds.y + inset, box.y - pad))
-  const maxX = round(Math.min(bounds.x + bounds.w - inset, box.x + box.w + pad))
-  const maxY = round(Math.min(bounds.y + bounds.h - inset, box.y + box.h + pad))
-  const w = round(Math.max(4, maxX - minX))
-  const h = round(Math.max(4, maxY - minY))
-  const arm = round(Math.max(4, Math.min(10, w * 0.22, h * 0.28)))
+): SpotlightGeometry | null {
+  const boundMinX = bounds.x + inset
+  const boundMinY = bounds.y + inset
+  const boundMaxX = bounds.x + bounds.w - inset
+  const boundMaxY = bounds.y + bounds.h - inset
+  const availW = boundMaxX - boundMinX
+  const availH = boundMaxY - boundMinY
+  if (availW <= 0 || availH <= 0) return null
+
+  if (
+    box.x + box.w <= boundMinX ||
+    box.x >= boundMaxX ||
+    box.y + box.h <= boundMinY ||
+    box.y >= boundMaxY
+  ) {
+    return null
+  }
+
+  let x1 = Math.max(boundMinX, box.x - pad)
+  let y1 = Math.max(boundMinY, box.y - pad)
+  let x2 = Math.min(boundMaxX, box.x + box.w + pad)
+  let y2 = Math.min(boundMaxY, box.y + box.h + pad)
+
+  const minW = Math.min(4, availW)
+  const minH = Math.min(4, availH)
+  if (x2 - x1 < minW) {
+    x1 = Math.max(boundMinX, Math.min(boundMaxX - minW, x1))
+    x2 = x1 + minW
+  }
+  if (y2 - y1 < minH) {
+    y1 = Math.max(boundMinY, Math.min(boundMaxY - minH, y1))
+    y2 = y1 + minH
+  }
+
+  const minX = round(x1)
+  const minY = round(y1)
+  const maxX = round(x2)
+  const maxY = round(y2)
+  const w = round(maxX - minX)
+  const h = round(maxY - minY)
+  const arm = round(Math.min(10, w / 2, h / 2, Math.max(4, Math.min(w * 0.22, h * 0.28))))
   const cornersPath = [
     `M ${minX} ${round(minY + arm)} V ${minY} H ${round(minX + arm)}`,
     `M ${round(maxX - arm)} ${minY} H ${maxX} V ${round(minY + arm)}`,
