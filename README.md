@@ -23,7 +23,7 @@ This runs all `tests/*.test.ts` suites (including sandbox replays) and the produ
 
 | Mode | Try it | What happens |
 | --- | --- | --- |
-| Learn | `#learn` → `#lesson/streams` | Guided walkthroughs keep their existing player, timeline, Inspect and URLs. Follow a practice or concept link below the player. |
+| Learn | `#learn` → `#lesson/streams` | Reader-paced visual scenarios (`←`/`→`, step pills, `Auto` playback, `Fit`, `Inspect`, state HUD chips, and `"What changed"` deltas) with deep links such as `#lesson/streams/3`. |
 | Practice | `#practice` → `#practice/1` | Six Linux X-Ray missions run against an in-memory shell and filesystem. Inspect files, descriptors, PATH and processes, then review proposals **without executing them**. Complete one mission to open the next. |
 | Weeks | `#weeks/asc01` | Week 01 pairs Learn and Practice with the actual [Linux & Git workshop](https://github.com/hkust-asc/ws26-01-linux-git). The local checklist is self-reported, not a submission. Credentials, live exercises, profiles and PRs stay outside this app. |
 | Atlas | `#atlas` → `#atlas/concept/standard-streams` | Reference cards, including all 17 Linux X-Ray Codex topics, are always readable. A *Practiced* mark records rehearsal, not permission to read. Existing scene links such as `#cluster/login` still go straight to the inspector. |
@@ -47,11 +47,11 @@ Learn bookmarks/completion, field checkboxes, practice completions and simulated
 - **Streams & redirection** (`#lesson/streams`, or `?lesson=streams`) follows a demo passcode and diagnostics through `>` and `2>`, then asks learners to predict what appears on screen. It also accompanies Quest 2.
 - **Linux filesystem** (`#lesson/linux-fs`, or `?lesson=linux-fs`) follows `pwd`, `ls -a`, relative and absolute paths, and an example of local and shared mounts. It accompanies [Quest 1](https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore).
 - Use the visual **Back** pill, **Related** entry chips, or the sidebar **Resume scenario** card to move across connected scenes and scenarios without losing your saved place.
-- The timed lessons autoplay at 1x. Choose 2x for a quicker replay, seek with the segmented timeline, or pause with **Inspect**.
-- Compare local and cross-socket CPU/memory placement.
-- Separate the drawing's layers, reset the node view without rewinding the scenario, or export its SVG.
+- Step through scenarios at your own pace with **Prev** / **Next** (`←` / `→`) or step pills, toggle **Auto** (`Space`, with `0.5x` / `1x` / `2x` speed) for hands-free playback, replay the current step's causal beat with **R**, toggle full-diagram framing with **Fit** (`0`), or inspect individual components with **Inspect** (`I`).
+- Compare local and cross-socket CPU/memory placement in both the Explore A30 view and **Host to GPU**.
+- Separate the node drawing's layers, reset the node view, or export its SVG.
 - Open Illustrative topology for sources and assumptions. Diagram links are not a measured wiring map.
-- Scene/subject URLs such as `#cluster/lmod` and `#a30/numa` support direct links and browser Back.
+- Scene, subject, and step URLs such as `#cluster/lmod`, `#a30/numa`, and `#lesson/streams/3` support direct links and browser Back.
 
 The published A30 profile has two Xeon Gold 6448Y sockets, four A30 GPUs with 24 GB HBM2 each, and 512 GB DDR5 host memory. These figures and the overview's other node-family profiles come from the [official HPC4 specification](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4), checked on 2026-10-19. Storage notes follow the [official storage policies](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4/fileandstorage).
 
@@ -62,13 +62,13 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 - `src/catalog.ts`: domain categories, current & planned entry registry, route parsing, filtering, and Think Back navigation trail.
 - `src/platform/`: mode surfaces, search, Codex-to-Atlas IDs, weekly briefs and local learning progress. Add a week in `curriculum.ts` using existing lesson/mission/concept IDs and link to its original workshop repo.
 - `src/practice/engine/`: typed port of the ASC team's Linux X-Ray shell and mission observers. `src/practice/workstation.ts` and `state-view.ts` present those results in the explorer’s visual style; no Linux X-Ray dashboard CSS, live shell, or backend is needed.
-- `src/glyphs.ts`: miniature isometric and schematic SVG glyphs using the shared blue/green/amber/slate palette.
-- `src/model.ts`: subject content, evidence, scene-aware scenarios, state transitions, transfer paths.
-- `src/scene.ts`: reusable projected boxes, node cutaway, and cluster-family glyphs.
-- `src/layout.ts`: semantic workspace shell, grouped navigation, shared inspector, and scenario player.
-- `src/main.ts`: accessible controls, scenario playback, inspection, SVG export.
-- `src/app.css`: visual styling, responsive layout, reduced-motion behavior.
-- `src/timed-lesson/`: shared clock, transport, callouts, and Identify mode.
-- `src/schematic/`: declarative SVG card/wire schema, ELKjs dual-layout routing, and GSAP scrubbed motion.
-- `src/first-job/`, `src/module-load/`, `src/host-to-gpu/`, `src/ssh-tmux/`, `src/streams/`, `src/linux-fs/`: scene-specific storytelling and rendering.
-- `tests/model.test.ts`: navigation, playback, and scene-state tests.
+- `src/iso.ts`: shared parameterized 2:1 isometric projector, back-to-front depth sorting, and semantic 3-face palettes.
+- `src/glyphs.ts`: miniature isometric and schematic SVG glyphs using `src/iso.ts`.
+- `src/model.ts`: subject content, evidence, Explore state transitions, and illustrative transfer paths.
+- `src/scene.ts`: reusable projected hardware components, A30 node cutaway, and cluster-family glyphs.
+- `src/layout.ts`: semantic workspace shell, grouped navigation, and shared Explore inspector.
+- `src/main.ts`: accessible controls, routing, scenario mounting, inspection, and SVG export.
+- `src/app.css`: visual styling, responsive layout, and reduced-motion behavior.
+- `src/stage/`: unified 7-layer SVG stage renderer (`renderer.ts`), 3D isometric stage adapter (`iso-scene.ts`), synchronous port/wire router & collision validator (`layout.ts`), text-width measurement (`measure.ts`), pure step/autoplay runner (`runner.ts`), and scenario workbench UI (`player.ts`, `stage.css`).
+- `src/first-job/`, `src/module-load/`, `src/host-to-gpu/`, `src/ssh-tmux/`, `src/streams/`, `src/linux-fs/`: declarative per-step scenario specs and scene bindings.
+- `tests/model.test.ts` & `tests/platform.test.ts`: navigation, stage layout validation, runner state, bookmark migration, and scenario invariant tests.
