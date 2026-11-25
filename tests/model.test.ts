@@ -10,8 +10,18 @@ import {
   pushTrail,
 } from '../src/catalog.ts'
 import { initialState, jobSteps, scenarios, stages, transferPath, updateState } from '../src/model.ts'
+import { frameAt as jobFrameAt, timeline as jobTimeline } from '../src/first-job/story.ts'
 import { frameAt as gpuFrameAt, timeline as gpuTimeline } from '../src/host-to-gpu/story.ts'
 import { frameAt as filesystemFrameAt, timeline as filesystemTimeline } from '../src/linux-fs/story.ts'
+import {
+  frameAt as moduleFrameAt,
+  moduleMotion,
+  moduleNodes,
+  moduleWires,
+  timeline as moduleTimeline,
+} from '../src/module-load/story.ts'
+import { computeSchematicLayouts } from '../src/schematic/layout.ts'
+import { createMotionSampler } from '../src/schematic/motion.ts'
 import { frameAt as sshFrameAt, timeline as sshTimeline } from '../src/ssh-tmux/story.ts'
 import { frameAt as streamsFrameAt, timeline as streamsTimeline } from '../src/streams/story.ts'
 import type { PlaybackState } from '../src/timed-lesson/timeline.ts'
@@ -158,7 +168,7 @@ test('resetting the node view does not rewind, pause, or change the active scena
 
 test('at normal speed each timed lesson takes twice its authored duration', () => {
   const playing: PlaybackState = { positionMs: 0, startedAt: 0, inspection: null, rate: 1 }
-  for (const timeline of [gpuTimeline, sshTimeline, streamsTimeline, filesystemTimeline]) {
+  for (const timeline of [jobTimeline, gpuTimeline, sshTimeline, streamsTimeline, filesystemTimeline, moduleTimeline]) {
     const nextBeat = timeline.beats[1]!.startMs * 2
     assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat - 1)).index, 0)
     assert.equal(timeline.beatAt(timeline.positionAt(playing, nextBeat)).index, 1)
@@ -317,9 +327,81 @@ test('rewinding from shared mounts restores the tree before the storage reveal',
   assert.equal(earlier.cwd, 'user-home')
 })
 
+test('sbatch queues a pending job while keeping the interactive shell on login01', () => {
+  const initial = jobFrameAt(1000)
+  assert.equal(initial.login.shellOpen, true)
+  assert.equal(initial.slurm.status, 'idle')
+  assert.equal(initial.compute.allocated, false)
+  assert.equal(initial.scratchOutput, false)
+
+  const inFlight = jobFrameAt(3000)
+  assert.equal(inFlight.activeWire, 'submit')
+  assert.equal(inFlight.packet?.wire, 'submit')
+  assert.equal(inFlight.slurm.status, 'idle')
+
+  const queued = jobFrameAt(4200)
+  assert.equal(queued.login.shellOpen, true)
+  assert.equal(queued.slurm.status, 'pending')
+  assert.equal(queued.compute.allocated, false)
+  assert.equal(queued.env.status, 'absent')
+})
+
+test('allocation grants gpu01 before module load updates the batch shell environment', () => {
+  const allocateStart = jobTimeline.beats.find(beat => beat.id === 'allocate')!.startMs
+  const granting = jobFrameAt(allocateStart + 2800)
+  assert.equal(granting.slurm.status, 'running')
+  assert.equal(granting.packet?.wire, 'allocate')
+  assert.equal(granting.compute.allocated, false)
+
+  const allocated = jobFrameAt(allocateStart + 3800)
+  assert.equal(allocated.compute.allocated, true)
+  assert.equal(allocated.gpu.status, 'allocated')
+  assert.equal(allocated.env.status, 'starting')
+
+  const modulesStart = jobTimeline.beats.find(beat => beat.id === 'modules')!.startMs
+  assert.equal(jobFrameAt(modulesStart + 1000).env.status, 'starting')
+  assert.equal(jobFrameAt(modulesStart + 1000).activeWire, 'script-read')
+  assert.equal(jobFrameAt(modulesStart + 3200).env.status, 'loaded')
+})
+
+test('job output streams directly to shared scratch, survives node release, and clears on rewind', () => {
+  const executeStart = jobTimeline.beats.find(beat => beat.id === 'execute')!.startMs
+  const computing = jobFrameAt(executeStart + 1500)
+  assert.equal(computing.gpu.status, 'running')
+  assert.equal(computing.activeWire, null)
+  assert.equal(computing.scratchOutput, false)
+
+  const writing = jobFrameAt(executeStart + 3800)
+  assert.equal(writing.activeWire, 'scratch-write')
+  assert.equal(writing.packet?.wire, 'scratch-write')
+  assert.equal(writing.scratchOutput, false)
+  assert.equal(jobFrameAt(executeStart + 5000).scratchOutput, true)
+
+  const finishStart = jobTimeline.beats.find(beat => beat.id === 'finish')!.startMs
+  const released = jobFrameAt(finishStart + 1000)
+  assert.equal(released.slurm.status, 'completed')
+  assert.equal(released.compute.allocated, false)
+  assert.equal(released.compute.released, true)
+  assert.equal(released.gpu.status, 'released')
+  assert.equal(released.scratchOutput, true)
+
+  const reading = jobFrameAt(finishStart + 2600)
+  assert.equal(reading.activeWire, 'scratch-read')
+  assert.equal(reading.login.activity, 'reading')
+
+  const rewound = jobFrameAt(1500)
+  assert.equal(rewound.scratchOutput, false)
+  assert.equal(rewound.compute.released, false)
+  assert.equal(rewound.slurm.status, 'idle')
+})
+
 test('legacy lesson query URLs normalize into unified hash routes', () => {
   assert.equal(normalizeLessonUrl('https://example.org/?lesson=streams'), 'https://example.org/#lesson/streams')
   assert.equal(normalizeLessonUrl('https://example.org/?lesson=gpu-copy-sol'), 'https://example.org/#lesson/host-to-gpu')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=first-job'), 'https://example.org/#lesson/first-job')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=job-walkthrough'), 'https://example.org/#lesson/first-job')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=module-load'), 'https://example.org/#lesson/module-load')
+  assert.equal(normalizeLessonUrl('https://example.org/?lesson=lmod'), 'https://example.org/#lesson/module-load')
   assert.equal(normalizeLessonUrl('https://example.org/?lesson=unknown'), null)
   assert.equal(normalizeLessonUrl('https://example.org/#a30/numa'), null)
 })
@@ -333,7 +415,90 @@ test('catalog routes default to all entries and preserve domain, scene, and less
   assert.deepEqual(parseRoute('#a30/numa'), { view: 'workbench', scene: 'a30', nodeTopic: 'numa' })
   assert.deepEqual(parseRoute('#cluster/lmod'), { view: 'workbench', scene: 'cluster', clusterTopic: 'lmod' })
   assert.deepEqual(parseRoute('#lesson/ssh-tmux'), { view: 'lesson', lesson: 'ssh-tmux' })
-  assert.deepEqual(parseRoute('#scenario/first-job'), { view: 'workbench', scene: 'cluster', scenario: 'first-job' })
+  assert.deepEqual(parseRoute('#lesson/first-job'), { view: 'lesson', lesson: 'first-job' })
+  assert.deepEqual(parseRoute('#lesson/module-load'), { view: 'lesson', lesson: 'module-load' })
+  assert.deepEqual(parseRoute('#scenario/first-job'), { view: 'lesson', lesson: 'first-job' })
+})
+
+test('module load mutates shell environment without touching Spack and resets cleanly for sbatch', () => {
+  const miss = moduleFrameAt(3000)
+  assert.equal(miss.context, 'login01')
+  assert.equal(miss.loadedModule, null)
+  assert.equal(miss.commandNotFound, true)
+  assert.deepEqual(miss.activeWires, ['login-env', 'env-os'])
+
+  const loading = moduleFrameAt(7000)
+  assert.equal(loading.loadedModule, null)
+  assert.deepEqual(loading.activeWires, ['login-lmod'])
+
+  const loaded = moduleFrameAt(9500)
+  assert.equal(loaded.context, 'login01')
+  assert.equal(loaded.loadedModule, 'cuda/12.8')
+  assert.equal(loaded.activeWires.includes('env-spack'), false)
+
+  const resolved = moduleFrameAt(15000)
+  assert.equal(resolved.resolvedExecutable, true)
+  assert.deepEqual(resolved.activeWires, ['login-env', 'env-spack'])
+
+  const batchSpawned = moduleFrameAt(20000)
+  assert.equal(batchSpawned.context, 'gpu01')
+  assert.equal(batchSpawned.batchStatus, 'starting')
+  assert.equal(batchSpawned.loadedModule, null)
+
+  const batchRunning = moduleFrameAt(24000)
+  assert.equal(batchRunning.context, 'gpu01')
+  assert.equal(batchRunning.batchStatus, 'running')
+  assert.equal(batchRunning.loadedModule, 'cuda/12.8')
+  assert.equal(batchRunning.resolvedExecutable, true)
+
+  const rewound = moduleFrameAt(1000)
+  assert.equal(rewound.context, 'login01')
+  assert.equal(rewound.loadedModule, null)
+  assert.equal(rewound.batchStatus, 'idle')
+})
+
+test('ELK schematic layout produces non-overlapping node bounds and routed paths in wide and compact modes', async () => {
+  const layouts = await computeSchematicLayouts(moduleNodes, moduleWires)
+  for (const mode of ['wide', 'compact'] as const) {
+    const layout = layouts[mode]
+    const entries = Object.entries(layout.nodes)
+    assert.equal(entries.length, moduleNodes.length)
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const [, a] = entries[i]!
+        const [, b] = entries[j]!
+        const separated = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y
+        assert.equal(separated, true, `${mode} nodes ${entries[i]![0]} and ${entries[j]![0]} overlapped`)
+      }
+    }
+    for (const wire of moduleWires) {
+      assert.match(layout.wires[wire.id].path, /^M /)
+      assert.ok(layout.wires[wire.id].points.length >= 2)
+    }
+  }
+})
+
+test('GSAP schematic motion sampler scrubs deterministically forward and backward and respects reduced motion', () => {
+  const wireIds = moduleWires.map(wire => wire.id)
+  const nodeIds = moduleNodes.map(node => node.id)
+  const sampler = createMotionSampler(wireIds, nodeIds, moduleMotion)
+  try {
+    const mid = sampler.sample(8500, false)
+    assert.equal(mid.transfers.length, 1)
+    assert.equal(mid.transfers[0]!.id, 'edit-env')
+    assert.ok(mid.transfers[0]!.progress > 0 && mid.transfers[0]!.progress < 1)
+
+    const reduced = sampler.sample(8500, true)
+    assert.equal(reduced.transfers.length, 0)
+    assert.equal(reduced.wireReveal['lmod-env'], 1)
+
+    sampler.sample(24000, false)
+    const rewound = sampler.sample(8500, false)
+    assert.equal(rewound.transfers.length, 1)
+    assert.ok(Math.abs(rewound.transfers[0]!.progress - mid.transfers[0]!.progress) < 1e-6)
+  } finally {
+    sampler.destroy()
+  }
 })
 
 test('think-back trail deduplicates consecutive routes and falls back to owning domain', () => {

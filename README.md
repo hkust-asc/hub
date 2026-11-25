@@ -26,7 +26,8 @@ The model tests require Node.js 22.18 or newer for native TypeScript execution.
 - Open any **Domain Hub** (`#atlas/nodes`, `#atlas/linux`, etc.) to browse associated scenes, concepts, and guided scenarios together, or filter across current and planned items directly in **All Entries**.
 - Select hardware in a diagram or use the shared Inspect subject menu. Secondary explanations and related ideas are under Why it matters.
 - Open the A30 cutaway (`#a30`) from the Atlas, navigation, or subject notes. Software subjects remain distinct from physical components.
-- **A job through HPC4** (`#scenario/first-job`) follows a batch job from login to compute and storage.
+- **Job walkthrough** (`#lesson/first-job`, or `?lesson=first-job`) follows `sbatch` from a login shell through Slurm queuing, Lmod environment setup on an A30 compute node, and output written to shared `/scratch`.
+- **Environment modules** (`#lesson/module-load`, or `?lesson=module-load`) shows how `module load` rewires `PATH` and build variables in login and Slurm batch shells without moving pre-built Spack packages.
 - **Host to GPU** (`#lesson/host-to-gpu`, or `?lesson=host-to-gpu`) shows the input and result copies at each memory location. Compare **Local** and **Cross-socket** to follow different routes.
 - **SSH & tmux** (`#lesson/ssh-tmux`, or `?lesson=ssh-tmux`) compares a task run directly over SSH with the same task inside tmux, then reconnects and reads the result. It accompanies [ASC Week 1, Quest 2](https://github.com/hkust-asc/ws26-01-linux-git#quest-2-redirect-output-and-use-tmux).
 - **Streams & redirection** (`#lesson/streams`, or `?lesson=streams`) follows a demo passcode and diagnostics through `>` and `2>`, then asks learners to predict what appears on screen. It also accompanies Quest 2.
@@ -52,5 +53,6 @@ Component positions, memory-module counts, CPU/GPU/NIC affinity, PCIe routes, an
 - `src/main.ts`: accessible controls, scenario playback, inspection, SVG export.
 - `src/app.css`: visual styling, responsive layout, reduced-motion behavior.
 - `src/timed-lesson/`: shared clock, transport, callouts, and Identify mode.
-- `src/host-to-gpu/`, `src/ssh-tmux/`, `src/streams/`, `src/linux-fs/`: scene-specific storytelling and rendering.
+- `src/schematic/`: declarative SVG card/wire schema, ELKjs dual-layout routing, and GSAP scrubbed motion.
+- `src/first-job/`, `src/module-load/`, `src/host-to-gpu/`, `src/ssh-tmux/`, `src/streams/`, `src/linux-fs/`: scene-specific storytelling and rendering.
 - `tests/model.test.ts`: navigation, playback, and scene-state tests.

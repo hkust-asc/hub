@@ -33,6 +33,8 @@ const lessonLoaders: Record<LessonId, () => Promise<{ lesson: LessonOptions }>> 
   'ssh-tmux': () => import('./ssh-tmux/player'),
   streams: () => import('./streams/player'),
   'linux-fs': () => import('./linux-fs/player'),
+  'first-job': () => import('./first-job/player'),
+  'module-load': () => import('./module-load/player'),
 }
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -71,11 +73,11 @@ function refreshIcons(): void {
 }
 
 function progressForEntry(entryId: string): string | undefined {
+  const lessonState = savedLessons.get(entryId as LessonId)
+  if (lessonState) return `Beat ${lessonState.beat + 1}/${lessonState.total}`
   if (entryId === 'first-job' && visitedScenarios.has('first-job')) {
     return `Step ${state.scenario === 'first-job' ? state.step + 1 : 1}/${scenarios['first-job'].steps.length}`
   }
-  const lessonState = savedLessons.get(entryId as LessonId)
-  if (lessonState) return `Beat ${lessonState.beat + 1}/${lessonState.total}`
   return undefined
 }
 

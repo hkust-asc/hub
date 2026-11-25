@@ -2,7 +2,7 @@ import type { Tone } from './glyphs'
 import type { ClusterTopicId, ScenarioId, SceneId, TopicId } from './model'
 
 export type CategoryId = 'nodes' | 'interconnect' | 'software' | 'linux' | 'gpu-scaling'
-export type LessonId = 'host-to-gpu' | 'ssh-tmux' | 'streams' | 'linux-fs'
+export type LessonId = 'host-to-gpu' | 'ssh-tmux' | 'streams' | 'linux-fs' | 'first-job' | 'module-load'
 export type EntryKind = 'scene' | 'subject' | 'scenario' | 'planned'
 export type EvidenceBasis = 'published' | 'illustrative' | 'workshop'
 
@@ -375,7 +375,7 @@ export const entries: readonly EntryDef[] = [
     evidenceLabel: 'HPC software stack model',
     keywords: 'spack build package compiler dependency',
     target: { type: 'scene', scene: 'cluster', clusterTopic: 'spack' },
-    related: ['lmod', 'slurm', 'first-job'],
+    related: ['lmod', 'module-load', 'slurm', 'first-job'],
   },
   {
     id: 'lmod',
@@ -392,7 +392,7 @@ export const entries: readonly EntryDef[] = [
     evidenceLabel: 'Shell environment mechanism',
     keywords: 'lmod module load path environment',
     target: { type: 'scene', scene: 'cluster', clusterTopic: 'lmod' },
-    related: ['spack', 'slurm', 'first-job'],
+    related: ['module-load', 'spack', 'slurm', 'first-job'],
   },
   {
     id: 'slurm',
@@ -413,38 +413,38 @@ export const entries: readonly EntryDef[] = [
   },
   {
     id: 'first-job',
-    title: 'A job through HPC4',
+    title: 'Job walkthrough',
     shortTitle: 'Job walkthrough',
     category: 'software',
     kind: 'scenario',
     tone: 'amber',
     glyph: 'first-job',
     question: 'Where does a submitted batch job actually execute and write output?',
-    summary: 'Connected 10-step journey across login shell, Lmod, Slurm, A30 node cutaway, and /scratch.',
-    formatLabel: 'Connected Scenario · 10 steps',
-    segments: 10,
+    summary: 'Follows sbatch from login01 through Slurm queuing, Lmod setup on gpu01, and shared /scratch output.',
+    formatLabel: 'Timed Scenario · 5 beats · 55s',
+    segments: 5,
     evidenceBasis: 'illustrative',
-    evidenceLabel: 'Cross-scene cluster → node walkthrough',
-    keywords: 'first job sbatch walkthrough login compute storage',
-    target: { type: 'scenario', scenario: 'first-job' },
+    evidenceLabel: 'HPC4 batch workflow · Schematic links',
+    keywords: 'first job sbatch walkthrough login compute slurm lmod spack scratch storage',
+    target: { type: 'lesson', lesson: 'first-job' },
     related: ['slurm', 'lmod', 'host-to-gpu', 'shared-storage'],
   },
   {
-    id: 'module-load-planned',
-    title: 'What does module load change?',
+    id: 'module-load',
+    title: 'Environment modules',
     shortTitle: 'module load',
     category: 'software',
-    kind: 'planned',
+    kind: 'scenario',
     tone: 'green',
     glyph: 'lmod',
     question: 'Why wasn’t the compiler found before `module load`, and what happens in sbatch?',
-    summary: 'Next storyboard slice in AUTHORING.md: before/after shell environment and batch context.',
-    formatLabel: 'Planned Timed Scenario · 4 beats',
+    summary: 'Follows PATH and CUDA_HOME across Lmod modulefiles, Spack prefixes, and Slurm batch shells.',
+    formatLabel: 'Timed Scenario · 4 beats · 51s',
     segments: 4,
     evidenceBasis: 'illustrative',
-    evidenceLabel: 'Next slice in AUTHORING.md',
-    keywords: 'planned module load path batch environment',
-    target: { type: 'planned' },
+    evidenceLabel: 'Tier 2 Spack / Lmod stack · Illustrative paths',
+    keywords: 'lmod module load avail switch purge path cuda_home spack batch environment',
+    target: { type: 'lesson', lesson: 'module-load' },
     related: ['lmod', 'spack', 'first-job'],
   },
   {
@@ -646,7 +646,7 @@ export const entries: readonly EntryDef[] = [
 
 const categoryMap = new Map(categories.map(category => [category.id, category]))
 const entryMap = new Map(entries.map(entry => [entry.id, entry]))
-const validLessons = new Set<LessonId>(['host-to-gpu', 'ssh-tmux', 'streams', 'linux-fs'])
+const validLessons = new Set<LessonId>(['host-to-gpu', 'ssh-tmux', 'streams', 'linux-fs', 'first-job', 'module-load'])
 
 export function getCategory(id: CategoryId): CategoryDef {
   return categoryMap.get(id)!
@@ -693,7 +693,7 @@ export function routeForTarget(target: EntryTarget): string | null {
     case 'lesson':
       return `#lesson/${target.lesson}`
     case 'scenario':
-      return target.scenario === 'gpu-copy' ? '#lesson/host-to-gpu' : `#scenario/${target.scenario}`
+      return target.scenario === 'gpu-copy' ? '#lesson/host-to-gpu' : '#lesson/first-job'
     case 'scene':
       if (target.scene === 'a30') {
         return !target.nodeTopic || target.nodeTopic === 'gpu' ? '#a30' : `#a30/${target.nodeTopic}`
@@ -706,7 +706,13 @@ export function normalizeLessonUrl(href: string): string | null {
   const url = new URL(href)
   const raw = url.searchParams.get('lesson')
   if (!raw) return null
-  const mapped = raw === 'gpu-copy-sol' ? 'host-to-gpu' : raw
+  const mapped = raw === 'gpu-copy-sol'
+    ? 'host-to-gpu'
+    : raw === 'job-walkthrough'
+      ? 'first-job'
+      : raw === 'lmod'
+        ? 'module-load'
+        : raw
   if (!isLessonId(mapped)) return null
   url.searchParams.delete('lesson')
   url.hash = `#lesson/${mapped}`
@@ -726,7 +732,7 @@ export function parseRoute(hash: string): ParsedRoute {
   if (head === 'lesson' && isLessonId(tail)) return { view: 'lesson', lesson: tail }
   if (head === 'scenario') {
     if (tail === 'gpu-copy') return { view: 'lesson', lesson: 'host-to-gpu' }
-    if (tail === 'first-job') return { view: 'workbench', scene: 'cluster', scenario: 'first-job' }
+    if (tail === 'first-job') return { view: 'lesson', lesson: 'first-job' }
   }
   if (head === 'a30') {
     return { view: 'workbench', scene: 'a30', nodeTopic: tail as TopicId | undefined }

@@ -185,10 +185,18 @@ const glyphRenderers: Record<string, () => string> = {
     '<rect x="30" y="30" width="10" height="7" fill="#edf2f5" stroke="#b3bec8" stroke-width="1.1"/>',
 
   'first-job': () =>
-    '<circle cx="11" cy="24" r="4.5" fill="#eef2f6" stroke="#738596" stroke-width="1.4"/>' +
-    '<circle cx="24" cy="15" r="4.5" fill="#dae4f7" stroke="#5875ae" stroke-width="1.4"/>' +
-    '<circle cx="37" cy="28" r="4.5" fill="#d9efe7" stroke="#427e6e" stroke-width="1.4"/>' +
-    '<path d="M15 21.5 L20 17.5 M28 18 L33.5 24.5" fill="none" stroke="#d75846" stroke-width="1.8" stroke-linecap="round"/>',
+    '<rect x="16" y="6" width="16" height="6.5" fill="#f5dec3" stroke="#b07b43" stroke-width="1.15"/>' +
+    '<path d="M5 20.5 L7.5 18 H17.5 L20 20.5 V29.5 L17.5 32 H7.5 L5 29.5 Z" fill="#cbd2d9" stroke="#738596" stroke-width="1.1"/>' +
+    '<path d="M5 18.5 L7.5 16 H17.5 L20 18.5 V27 L17.5 29.5 H7.5 L5 27 Z" fill="#e6eaee" stroke="#738596" stroke-width="1.15"/>' +
+    '<rect x="7.5" y="20" width="10" height="6" fill="#2c414d"/>' +
+    '<path d="M27 20.5 L29.5 18 H40.5 L43 20.5 V30 L40.5 32.5 H29.5 L27 30 Z" fill="#7b97cf" stroke="#466199" stroke-width="1.1"/>' +
+    '<path d="M27 18.5 L29.5 16 H40.5 L43 18.5 V27.5 L40.5 30 H29.5 L27 27.5 Z" fill="#dae4f7" stroke="#5875ae" stroke-width="1.15"/>' +
+    '<rect x="30" y="19.5" width="10" height="3" fill="#e3f3ec" stroke="#427e6e" stroke-width=".9"/>' +
+    '<rect x="30" y="24" width="5.5" height="3.5" fill="#5c7ab8"/>' +
+    '<rect x="37" y="24" width="3" height="3.5" fill="#b1bac3"/>' +
+    '<rect x="10" y="36" width="28" height="6" fill="#d9efe7" stroke="#427e6e" stroke-width="1.2"/>' +
+    '<path d="M12.5 16 V9.5 H16 M32 9.5 H35 V16" fill="none" stroke="#c08b52" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M35 32.5 V36 M12.5 36 V32" fill="none" stroke="#427e6e" stroke-width="1.4" stroke-linecap="round"/>',
 
   'host-to-gpu': () =>
     box(-13, -4, -2, 9, 5, 9, 'green') +
