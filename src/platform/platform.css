@@ -1,6 +1,9 @@
 /* Topbar mode navigation & search trigger */
 .top-modes, .top-tools { display: flex; align-items: center; gap: 6px; }
 .top-tools { gap: 12px; }
+/* Equal-width side groups keep the mode tabs centred however wide the tools get. */
+.topbar > .brand-group, .topbar > .top-tools { flex: 1 1 0; }
+.topbar > .top-tools { justify-content: flex-end; }
 .mode-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; padding: 8px 13px; color: #5b6976; border-bottom: 2px solid transparent; transition: background .16s ease, color .16s ease, border-color .16s ease; }
 .mode-dot { width: 5px; height: 5px; background: var(--tone-strong); opacity: .55; flex-shrink: 0; transition: opacity .16s ease, transform .16s ease; }
 .mode-tab:hover { background: var(--tone-bg); color: var(--tone-ink); }

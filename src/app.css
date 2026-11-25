@@ -482,3 +482,17 @@ dialog h3 { font-size: 12px; font-weight: 500; margin-top: 24px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Dark theme. Invert the page and rotate the hue back, so every hand-tuned light
+   colour (CSS and the SVG diagrams) keeps its hue and only lightness flips.
+   The filter sits on the root element, which per the Filter Effects spec does not
+   create a containing block, so fixed and sticky elements keep working.
+   The root background paints the canvas and is not filtered, so it is set to the
+   filtered body colour directly. */
+.theme-toggle .theme-icon-moon { display: inline-flex; }
+.theme-toggle .theme-icon-sun { display: none; }
+:root[data-theme='dark'] { color-scheme: dark; background: #1f2123; filter: invert(.9) hue-rotate(180deg); }
+:root[data-theme='dark'] body { background: #f5f6f7; }
+:root[data-theme='dark'] img, :root[data-theme='dark'] video, :root[data-theme='dark'] picture { filter: invert(1) hue-rotate(180deg); }
+:root[data-theme='dark'] .theme-toggle .theme-icon-moon { display: none; }
+:root[data-theme='dark'] .theme-toggle .theme-icon-sun { display: inline-flex; }
