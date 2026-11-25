@@ -19,6 +19,14 @@ npm run check
 
 This runs all `tests/*.test.ts` suites (including sandbox replays) and the production build. Use Node.js 22.18 or newer for native TypeScript execution.
 
+## Deploy
+
+`vite.config.ts` sets `base: './'` so the built static bundle in `dist/` runs identically at a root domain or a GitHub Pages subpath such as `/hub/`. On GitHub:
+
+1. Ensure the repository visibility supports Pages (public on GitHub Free).
+2. In **Settings → Pages → Build and deployment**, set **Source** to **GitHub Actions**.
+3. Pushes to `main` (and manual **Actions → CI and Deploy GitHub Pages → Run workflow** dispatches) run `npm run check` and deploy `dist/` automatically.
+
 ## Four ways in
 
 | Mode | Try it | What happens |
