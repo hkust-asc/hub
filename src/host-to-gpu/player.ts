@@ -79,6 +79,7 @@ export const lesson: StageScenarioOptions<Placement> = {
             const rawLabel = titleEl?.textContent ?? topics[topic as keyof typeof topics].name
             titleEl?.remove()
             el.dataset.stagePart = topic
+            el.dataset.lessonPart = topic
             el.setAttribute('tabindex', '-1')
             const name = topic === 'gpu' ? rawLabel.split(',')[0]! : rawLabel
             return [el, { name, topic, subject: topics[topic as keyof typeof topics] }] as const
@@ -203,6 +204,11 @@ export const lesson: StageScenarioOptions<Placement> = {
               hud: frame.hud,
               viewBox: frame.viewBox,
               tokens,
+              spotlights: frame.focus.map(k => ({
+                id: k,
+                element: focusTargets[k],
+                tone: k === 'gpu' ? 'blue' : k === 'ram' ? 'green' : 'amber',
+              })),
             }
           },
           describePart(element, stepIndex, variant) {

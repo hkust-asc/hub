@@ -1,6 +1,7 @@
+import { computeSpotlightGeometry } from './layout.ts'
 import type { ViewBoxRect } from './layout.ts'
 import { measurePillWidth } from './measure.ts'
-import type { StagePartInfo, StageSceneController, StageStepNarrative, StageTone } from './types.ts'
+import type { StageBox, StagePartInfo, StageSceneController, StageStepNarrative, StageTone } from './types.ts'
 
 export interface SvgTokenPill {
   readonly id: string
@@ -11,9 +12,17 @@ export interface SvgTokenPill {
   readonly opacity?: number
 }
 
+export interface IsoSpotlightTarget {
+  readonly id: string
+  readonly element?: SVGGraphicsElement
+  readonly box?: StageBox
+  readonly tone?: StageTone
+}
+
 export interface IsoStageFrame extends StageStepNarrative {
   readonly viewBox?: ViewBoxRect
   readonly tokens?: readonly SvgTokenPill[]
+  readonly spotlights?: readonly IsoSpotlightTarget[]
 }
 
 export interface IsoStageSpec<VariantId extends string = string> {
@@ -40,6 +49,11 @@ export function createIsoStageScene<VariantId extends string = string>(
   const art = canvas.querySelector<SVGSVGElement>('svg')!
   art.classList.add('stage-svg', 'stage-iso-svg')
 
+  const spotlightLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  spotlightLayer.setAttribute('class', 'layer-spotlight st-iso-spotlights')
+  spotlightLayer.setAttribute('aria-hidden', 'true')
+  art.append(spotlightLayer)
+
   const tokenLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   tokenLayer.setAttribute('class', 'layer-over st-iso-tokens')
   tokenLayer.setAttribute('aria-hidden', 'true')
@@ -50,6 +64,26 @@ export function createIsoStageScene<VariantId extends string = string>(
     </g>
   `).join('')
   art.append(tokenLayer)
+
+  const spotlightEls = new Map<string, { group: SVGGElement; halo: SVGRectElement; corners: SVGPathElement }>()
+  function getSpotlightSlot(id: string) {
+    let slot = spotlightEls.get(id)
+    if (slot) return slot
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    group.setAttribute('class', 'st-spotlight')
+    group.dataset.spotlight = id
+    group.dataset.tone = 'blue'
+    group.setAttribute('hidden', '')
+    const halo = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    halo.setAttribute('class', 'st-spotlight-halo')
+    const corners = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    corners.setAttribute('class', 'st-spotlight-corners')
+    group.append(halo, corners)
+    spotlightLayer.append(group)
+    slot = { group, halo, corners }
+    spotlightEls.set(id, slot)
+    return slot
+  }
 
   const tokenEls = new Map(
     (spec.tokenIds ?? []).map(id => {
@@ -64,6 +98,7 @@ export function createIsoStageScene<VariantId extends string = string>(
 
   const binding = spec.bind(art)
   let currentViewBox: ViewBoxRect = { ...spec.baseViewBox }
+  let lastSpotlightStepKey = ''
   art.setAttribute('viewBox', `${currentViewBox.x} ${currentViewBox.y} ${currentViewBox.w} ${currentViewBox.h}`)
 
   return {
@@ -125,6 +160,50 @@ export function createIsoStageScene<VariantId extends string = string>(
         'viewBox',
         `${Math.round(currentViewBox.x * 10) / 10} ${Math.round(currentViewBox.y * 10) / 10} ${Math.round(currentViewBox.w * 10) / 10} ${Math.round(currentViewBox.h * 10) / 10}`,
       )
+
+      const spotlights = frame.spotlights ?? []
+      art.dataset.spotlight = String(spotlights.length > 0)
+      art.dataset.reducedMotion = String(options.reducedMotion)
+      const stepKey = `${options.stepIndex}:${options.variant}`
+      const stepChanged = stepKey !== lastSpotlightStepKey
+      lastSpotlightStepKey = stepKey
+
+      const activeIds = new Set(spotlights.map(sp => sp.id))
+      for (const [id, slot] of spotlightEls) {
+        if (!activeIds.has(id)) {
+          slot.group.setAttribute('hidden', '')
+          slot.group.classList.remove('is-pulsing')
+        }
+      }
+      for (const sp of spotlights) {
+        const rawBox = sp.box ?? (typeof sp.element?.getBBox === 'function'
+          ? (() => {
+            const b = sp.element.getBBox()
+            return b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null
+          })()
+          : null)
+        const slot = getSpotlightSlot(sp.id)
+        if (!rawBox) {
+          slot.group.setAttribute('hidden', '')
+          continue
+        }
+        slot.group.removeAttribute('hidden')
+        const tone = sp.tone ?? 'blue'
+        if (slot.group.dataset.tone !== tone) slot.group.dataset.tone = tone
+        const geom = computeSpotlightGeometry(rawBox, currentViewBox, 6, 2)
+        slot.halo.setAttribute('x', String(geom.halo.x))
+        slot.halo.setAttribute('y', String(geom.halo.y))
+        slot.halo.setAttribute('width', String(geom.halo.w))
+        slot.halo.setAttribute('height', String(geom.halo.h))
+        slot.corners.setAttribute('d', geom.cornersPath)
+        if (options.reducedMotion) {
+          slot.group.classList.remove('is-pulsing')
+        } else if (stepChanged) {
+          slot.group.classList.remove('is-pulsing')
+          void slot.group.getBoundingClientRect()
+          slot.group.classList.add('is-pulsing')
+        }
+      }
 
       return {
         narrative: {

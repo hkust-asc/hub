@@ -257,9 +257,23 @@ export interface StageScenarioOptions<VariantId extends string = string> {
   mountScene(canvas: HTMLElement): StageSceneController<VariantId>
 }
 
+export interface StageContinuationLink {
+  readonly route: string
+  readonly label: string
+  readonly kind?: 'practice' | 'lesson' | 'learn' | 'concept' | 'week' | 'scene'
+}
+
+export interface StageContinuation {
+  readonly kicker?: string
+  readonly primary: StageContinuationLink
+  readonly secondary?: readonly StageContinuationLink[]
+}
+
 export interface StageScenarioHost {
   readonly container: HTMLElement
   readonly initialStep?: number
+  readonly returnLink?: StageContinuationLink
+  readonly continuation?: StageContinuation
   readonly onProgress?: (stepIndex: number, stepCount: number, completed: boolean) => void
 }
 

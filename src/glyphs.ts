@@ -1,5 +1,5 @@
-import { createIsoProjector } from './iso'
-import type { IsoPaletteName } from './iso'
+import { createIsoProjector } from './iso.ts'
+import type { IsoPaletteName } from './iso.ts'
 
 export type Tone = 'blue' | 'green' | 'amber' | 'slate' | 'coral'
 

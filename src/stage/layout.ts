@@ -266,6 +266,36 @@ export function planCameraViewBox<EntityId extends string>(options: {
   }
 }
 
+export interface SpotlightGeometry {
+  readonly halo: StageBox
+  readonly cornersPath: string
+}
+
+export function computeSpotlightGeometry(
+  box: StageBox,
+  bounds: ViewBoxRect,
+  pad = 4,
+  inset = 1.5,
+): SpotlightGeometry {
+  const minX = round(Math.max(bounds.x + inset, box.x - pad))
+  const minY = round(Math.max(bounds.y + inset, box.y - pad))
+  const maxX = round(Math.min(bounds.x + bounds.w - inset, box.x + box.w + pad))
+  const maxY = round(Math.min(bounds.y + bounds.h - inset, box.y + box.h + pad))
+  const w = round(Math.max(4, maxX - minX))
+  const h = round(Math.max(4, maxY - minY))
+  const arm = round(Math.max(4, Math.min(10, w * 0.22, h * 0.28)))
+  const cornersPath = [
+    `M ${minX} ${round(minY + arm)} V ${minY} H ${round(minX + arm)}`,
+    `M ${round(maxX - arm)} ${minY} H ${maxX} V ${round(minY + arm)}`,
+    `M ${minX} ${round(maxY - arm)} V ${maxY} H ${round(minX + arm)}`,
+    `M ${round(maxX - arm)} ${maxY} H ${maxX} V ${round(maxY - arm)}`,
+  ].join(' ')
+  return {
+    halo: { x: minX, y: minY, w, h },
+    cornersPath,
+  }
+}
+
 export function boxesOverlap(a: StageBox, b: StageBox, margin = 1): boolean {
   return (
     a.x + margin < b.x + b.w &&

@@ -4,6 +4,7 @@ import '@fontsource/ibm-plex-sans/600.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
 import './platform/platform.css'
+import './stage/stage.css'
 import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
@@ -28,7 +29,8 @@ import type { Action, AppState, ClusterTopicId, SceneId, TopicId } from './model
 import { mountStageScenario } from './stage/player'
 import type { MountedStageScenario, StageScenarioOptions } from './stage/types'
 import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPosition } from './platform/progress'
-import { lessonLinks } from './platform/links'
+import { lessonContinuation, lessonLinks } from './platform/links'
+import { progressStore } from './practice/engine/storage'
 import { weeks } from './platform/curriculum'
 
 const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X }
@@ -129,9 +131,17 @@ async function ensureLessonMounted(lessonId: LessonId, requestedStep?: number): 
     ? Math.max(0, Math.min(lesson.steps.length - 1, requestedStep - 1))
     : resolveSavedStep(saved, lesson.steps.length)
   const entry = getEntry(lessonId)!
+  const backTarget = trail.at(-1)
+  const returnLink = backTarget
+    ? { route: backTarget.route, label: backTarget.label }
+    : { route: '#learn', label: 'Walkthroughs' }
+  const completedMissions = new Set(progressStore(browserStorage()).state.completed)
+  const continuation = lessonContinuation(lessonId, { completedMissions })
   const mounted = mountStageScenario(lesson, {
     container,
     initialStep,
+    returnLink,
+    continuation,
     onProgress(stepIndex, stepCount, completed) {
       learning.record(lessonId, stepBookmarkPosition(stepIndex, stepCount, completed))
       lastResumable = { entryId: entry.id, route: `#lesson/${lessonId}`, title: entry.shortTitle, glyph: entry.glyph, tone: entry.tone }
@@ -294,6 +304,9 @@ function renderWorkbench(): void {
   element('node-view').hidden = !node
   element('view-tools').hidden = !node
   element('view-label').innerHTML = `${icon(node ? 'box' : 'network')}${node ? 'Isometric anatomy' : 'Connectivity schematic'}`
+  element('view-click-cue-text').textContent = node
+    ? 'Click any component to inspect (I)'
+    : 'Click any block to inspect (I)'
 
   if (renderedScene !== state.scene) {
     const subjects = node ? Object.entries(topics) : Object.entries(clusterTopics)
@@ -654,13 +667,39 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !previewCard.hidden) {
     hidePreview()
   }
+  const inFormField =
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement ||
+    event.target instanceof HTMLSelectElement
   if (
     event.key === '/' &&
     currentRoute.view === 'atlas' &&
-    !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement)
+    !inFormField
   ) {
     event.preventDefault()
     element<HTMLInputElement>('atlas-search').focus()
+    return
+  }
+  if (
+    currentRoute.view === 'workbench' &&
+    !event.defaultPrevented &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !document.querySelector('dialog[open]') &&
+    !document.body.classList.contains('navigation-open')
+  ) {
+    if (event.key.toLowerCase() === 'i' && !inFormField) {
+      event.preventDefault()
+      const activeStage = state.scene === 'a30' ? element('diagram-stage') : element('cluster-stage')
+      const selectedPart =
+        activeStage.querySelector<HTMLElement>('[aria-pressed="true"]') ??
+        activeStage.querySelector<HTMLElement>('[data-topic], [data-cluster-topic]')
+      ;(selectedPart ?? element('subject-picker')).focus({ preventScroll: true })
+    } else if (event.key === 'Escape' && event.target instanceof Element && (event.target.closest('.diagram-stage') || event.target.id === 'subject-picker')) {
+      event.preventDefault()
+      element('page-title').focus({ preventScroll: true })
+    }
   }
 })
 

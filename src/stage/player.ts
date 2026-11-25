@@ -1,6 +1,6 @@
-import { createIcons, Eye, Maximize2, Pause, Play, RotateCcw, SkipBack, SkipForward, X } from 'lucide'
+import { ArrowLeft, ArrowRight, createIcons, Eye, Maximize2, Pause, Play, RotateCcw, SkipBack, SkipForward, X } from 'lucide'
 import { icon } from '../layout.ts'
-import { createInitialRunnerState, reduceRunnerState } from './runner.ts'
+import { createInitialRunnerState, describeStageCue, describeStageRailNav, reduceRunnerState } from './runner.ts'
 import type { StagePlaybackRate, StageRunnerAction } from './runner.ts'
 import type {
   MountedStageScenario,
@@ -9,10 +9,9 @@ import type {
   StageScenarioOptions,
   StageStepNarrative,
 } from './types.ts'
-import './stage.css'
 
-export { createInitialRunnerState, reduceRunnerState } from './runner.ts'
-export type { StagePlaybackRate, StageRunnerAction, StageRunnerState } from './runner.ts'
+export { createInitialRunnerState, describeStageCue, describeStageRailNav, reduceRunnerState } from './runner.ts'
+export type { StagePlaybackRate, StageRailNavView, StageRunnerAction, StageRunnerState } from './runner.ts'
 
 function escapeHtml(text: string): string {
   return text
@@ -62,7 +61,10 @@ export function mountStageScenario<VariantId extends string = string>(
 
         <section class="stage-canvas-wrap" aria-label="${escapeHtml(options.diagramLabel)}">
           <div class="stage-canvas"></div>
-          <div class="stage-inspect-banner" hidden>Select or hover any component to inspect its role</div>
+          <button type="button" class="stage-canvas-cue" data-stage-cue aria-pressed="false">
+            <span class="stage-cue-dot" aria-hidden="true"></span>
+            <span data-stage-cue-text>Click any block to inspect (I)</span>
+          </button>
           <div class="stage-inspect-pop" hidden>
             <button type="button" class="stage-pop-close" aria-label="Close component details" hidden>${icon('x')}</button>
             <span class="stage-pop-role"></span>
@@ -94,6 +96,9 @@ export function mountStageScenario<VariantId extends string = string>(
               <button type="button" class="stage-nav-btn stage-next-primary" data-stage-next aria-label="Next step">
                 <span>Next</span>${icon('skip-forward')}
               </button>
+              <a class="stage-nav-btn stage-next-primary" data-transport-continue hidden>
+                <span data-transport-continue-label>Continue</span>${icon('arrow-right')}
+              </a>
             </div>
             <div class="stage-controls-meta">
               <select class="stage-rate-select" aria-label="Playback speed">
@@ -124,6 +129,29 @@ export function mountStageScenario<VariantId extends string = string>(
           <span class="stage-section-label">What changed</span>
           <ul class="stage-changes-list"></ul>
         </div>
+        <footer class="stage-rail-footer" data-rail-footer aria-label="Step navigation">
+          <div class="stage-rail-upnext" data-rail-upnext hidden>
+            <span class="stage-section-label" data-rail-upnext-kicker>Up next</span>
+            <div class="stage-rail-chips" data-rail-chips></div>
+          </div>
+          <div class="stage-rail-actions">
+            <a class="stage-rail-btn stage-rail-return" data-rail-return hidden>
+              ${icon('arrow-left')}<span data-rail-return-label></span>
+            </a>
+            <button type="button" class="stage-rail-btn stage-rail-prev" data-rail-prev>
+              ${icon('arrow-left')}<span>Prev</span>
+            </button>
+            <button type="button" class="stage-rail-btn stage-rail-next" data-rail-next>
+              <span data-rail-next-label></span>${icon('arrow-right')}
+            </button>
+            <a class="stage-rail-btn stage-rail-next stage-rail-continue" data-rail-continue hidden>
+              <span data-rail-continue-label></span>${icon('arrow-right')}
+            </a>
+          </div>
+          <p class="stage-kbd-strip" data-stage-kbd aria-label="Keyboard shortcuts">
+            <kbd>←</kbd> <kbd>→</kbd> step · <kbd>R</kbd> replay · <kbd>I</kbd> inspect · <kbd>Space</kbd> auto
+          </p>
+        </footer>
       </aside>
     </div>
 
@@ -140,7 +168,7 @@ export function mountStageScenario<VariantId extends string = string>(
 
   createIcons({
     root,
-    icons: { Eye, Maximize2, Pause, Play, RotateCcw, SkipBack, SkipForward, X },
+    icons: { ArrowLeft, ArrowRight, Eye, Maximize2, Pause, Play, RotateCcw, SkipBack, SkipForward, X },
     attrs: { 'aria-hidden': 'true', 'stroke-width': 1.65 },
   })
   root.querySelectorAll('svg.lucide rect[rx], svg.lucide rect[ry]').forEach(rect => {
@@ -156,6 +184,8 @@ export function mountStageScenario<VariantId extends string = string>(
   const stepFills = stepBtns.map(btn => btn.querySelector<HTMLElement>('.stage-step-fill')!)
   const prevBtn = root.querySelector<HTMLButtonElement>('[data-stage-prev]')!
   const nextBtn = root.querySelector<HTMLButtonElement>('[data-stage-next]')!
+  const transportContinueLink = root.querySelector<HTMLAnchorElement>('[data-transport-continue]')!
+  const transportContinueLabel = root.querySelector<HTMLElement>('[data-transport-continue-label]')!
   const playBtn = root.querySelector<HTMLButtonElement>('[data-stage-play]')!
   const iconPlay = playBtn.querySelector<HTMLElement>('[data-icon-play]')!
   const iconPause = playBtn.querySelector<HTMLElement>('[data-icon-pause]')!
@@ -173,7 +203,19 @@ export function mountStageScenario<VariantId extends string = string>(
   const changesBoxEl = root.querySelector<HTMLElement>('.stage-changes-box')!
   const changesListEl = root.querySelector<HTMLUListElement>('.stage-changes-list')!
 
-  const inspectBanner = root.querySelector<HTMLElement>('.stage-inspect-banner')!
+  const railUpnextEl = root.querySelector<HTMLElement>('[data-rail-upnext]')!
+  const railUpnextKicker = root.querySelector<HTMLElement>('[data-rail-upnext-kicker]')!
+  const railChipsEl = root.querySelector<HTMLElement>('[data-rail-chips]')!
+  const railReturnLink = root.querySelector<HTMLAnchorElement>('[data-rail-return]')!
+  const railReturnLabel = root.querySelector<HTMLElement>('[data-rail-return-label]')!
+  const railPrevBtn = root.querySelector<HTMLButtonElement>('[data-rail-prev]')!
+  const railNextBtn = root.querySelector<HTMLButtonElement>('[data-rail-next]')!
+  const railNextLabel = root.querySelector<HTMLElement>('[data-rail-next-label]')!
+  const railContinueLink = root.querySelector<HTMLAnchorElement>('[data-rail-continue]')!
+  const railContinueLabel = root.querySelector<HTMLElement>('[data-rail-continue-label]')!
+
+  const stageCueBtn = root.querySelector<HTMLButtonElement>('[data-stage-cue]')!
+  const stageCueText = root.querySelector<HTMLElement>('[data-stage-cue-text]')!
   const popEl = root.querySelector<HTMLElement>('.stage-inspect-pop')!
   const popCloseBtn = root.querySelector<HTMLButtonElement>('.stage-pop-close')!
   const popRoleEl = root.querySelector<HTMLElement>('.stage-pop-role')!
@@ -190,6 +232,7 @@ export function mountStageScenario<VariantId extends string = string>(
   let prevHudMap = new Map<string, string>()
   let renderedNarrativeKey = ''
   let renderedHudKey = ''
+  let renderedChipsKey = ''
   let lastFrameNow = performance.now()
   let rafId = 0
   let completedReported = false
@@ -253,6 +296,7 @@ export function mountStageScenario<VariantId extends string = string>(
     const popW = popEl.offsetWidth || 230
     const popH = popEl.offsetHeight || 88
     const pad = 10
+    const bottomPad = 36
     const gap = 10
 
     const cx = targetBounds.left - wrapBounds.left + targetBounds.width / 2
@@ -262,7 +306,7 @@ export function mountStageScenario<VariantId extends string = string>(
     const left = Math.max(pad, Math.min(wrapBounds.width - popW - pad, cx - popW / 2))
     const top = topAbove >= pad
       ? topAbove
-      : Math.max(pad, Math.min(wrapBounds.height - popH - pad, topBelow))
+      : Math.max(pad, Math.min(wrapBounds.height - popH - bottomPad, topBelow))
 
     popEl.style.left = `${Math.round(left)}px`
     popEl.style.top = `${Math.round(top)}px`
@@ -271,6 +315,7 @@ export function mountStageScenario<VariantId extends string = string>(
   function updateInspectUi(): void {
     canvasWrap.classList.toggle('is-inspecting', state.inspecting)
     inspectBtn.setAttribute('aria-pressed', String(state.inspecting))
+    stageCueBtn.setAttribute('aria-pressed', String(state.inspecting))
     for (const part of partEls) {
       part.setAttribute('tabindex', state.inspecting ? '0' : '-1')
     }
@@ -280,10 +325,12 @@ export function mountStageScenario<VariantId extends string = string>(
       pinnedPart = null
     }
 
+    const cueLabel = describeStageCue(state.inspecting, Boolean(pinnedPart))
+    if (stageCueText.textContent !== cueLabel) stageCueText.textContent = cueLabel
+
     const activeTarget = [pinnedPart, state.inspecting ? (hoveredPart ?? focusedPart) : hoveredPart]
       .find(el => el && !el.closest('[hidden]')) ?? null
 
-    inspectBanner.hidden = !(state.inspecting && !activeTarget)
     if (!activeTarget) {
       popEl.hidden = true
       return
@@ -308,10 +355,82 @@ export function mountStageScenario<VariantId extends string = string>(
 
   function syncControls(hasCameraZoom: boolean): void {
     const maxIdx = steps.length - 1
-    prevBtn.disabled = state.stepIndex === 0
-    nextBtn.disabled = state.stepIndex >= maxIdx
-    prevBtn.title = state.stepIndex > 0 ? `Previous: ${steps[state.stepIndex - 1]!.label} (←)` : 'First step'
-    nextBtn.title = state.stepIndex < maxIdx ? `Next: ${steps[state.stepIndex + 1]!.label} (→)` : 'Final step'
+    const railNav = describeStageRailNav({
+      steps,
+      stepIndex: state.stepIndex,
+      returnLink: host.returnLink,
+      continuation: host.continuation,
+    })
+
+    prevBtn.disabled = railNav.isFirstStep
+    prevBtn.title = railNav.prevStepLabel ? `Previous: ${railNav.prevStepLabel} (←)` : 'First step'
+
+    if (railNav.primaryContinuation) {
+      nextBtn.hidden = true
+      transportContinueLink.hidden = false
+      transportContinueLink.href = railNav.primaryContinuation.route
+      transportContinueLink.dataset.route = railNav.primaryContinuation.route
+      transportContinueLabel.textContent = railNav.primaryContinuation.label
+      transportContinueLink.title = railNav.primaryContinuation.label
+    } else {
+      nextBtn.hidden = false
+      nextBtn.disabled = railNav.isFinalStep
+      nextBtn.title = railNav.nextStepLabel ? `Next: ${railNav.nextStepLabel} (→)` : 'Final step'
+      transportContinueLink.hidden = true
+    }
+
+    if (railNav.returnLink) {
+      railReturnLink.hidden = false
+      railReturnLink.href = railNav.returnLink.route
+      railReturnLink.dataset.route = railNav.returnLink.route
+      railReturnLabel.textContent = railNav.returnLink.label
+      railReturnLink.title = `Back to ${railNav.returnLink.label}`
+      railPrevBtn.hidden = true
+    } else {
+      railReturnLink.hidden = true
+      railPrevBtn.hidden = false
+      railPrevBtn.disabled = railNav.isFirstStep
+      railPrevBtn.title = railNav.prevStepLabel ? `Previous: ${railNav.prevStepLabel} (←)` : 'First step'
+      railPrevBtn.setAttribute(
+        'aria-label',
+        railNav.prevStepLabel ? `Previous step: ${railNav.prevStepLabel}` : 'Previous step',
+      )
+    }
+
+    if (railNav.primaryContinuation) {
+      railNextBtn.hidden = true
+      railContinueLink.hidden = false
+      railContinueLink.href = railNav.primaryContinuation.route
+      railContinueLink.dataset.route = railNav.primaryContinuation.route
+      railContinueLink.dataset.kind = railNav.primaryContinuation.kind ?? 'learn'
+      railContinueLabel.textContent = railNav.primaryContinuation.label
+      railContinueLink.setAttribute('aria-label', railNav.primaryContinuation.label)
+    } else {
+      railContinueLink.hidden = true
+      railNextBtn.hidden = false
+      railNextBtn.disabled = railNav.isFinalStep
+      const nextLabelText = railNav.nextStepLabel ? `Next: ${railNav.nextStepLabel}` : 'Final step'
+      railNextLabel.textContent = nextLabelText
+      railNextBtn.title = railNav.nextStepLabel ? `${nextLabelText} (→)` : 'Final step'
+      railNextBtn.setAttribute('aria-label', nextLabelText)
+    }
+
+    const showSecondary = railNav.secondaryContinuation.length > 0
+    railUpnextEl.hidden = !showSecondary && !railNav.primaryContinuation
+    if (!railUpnextEl.hidden) {
+      railUpnextKicker.textContent = railNav.upNextKicker
+      const chipsKey = railNav.secondaryContinuation.map(item => `${item.route}:${item.label}`).join('|')
+      if (chipsKey !== renderedChipsKey) {
+        renderedChipsKey = chipsKey
+        railChipsEl.hidden = !showSecondary
+        railChipsEl.innerHTML = railNav.secondaryContinuation
+          .map(
+            item =>
+              `<a class="stage-rail-chip" data-kind="${escapeHtml(item.kind ?? 'concept')}" data-route="${escapeHtml(item.route)}" href="${escapeHtml(item.route)}">${escapeHtml(item.label)}</a>`,
+          )
+          .join('')
+      }
+    }
 
     playBtn.setAttribute('aria-pressed', String(state.autoplay))
     iconPlay.hidden = state.autoplay
@@ -401,10 +520,22 @@ export function mountStageScenario<VariantId extends string = string>(
 
   prevBtn.addEventListener('click', () => dispatch({ type: 'prev' }), { signal })
   nextBtn.addEventListener('click', () => dispatch({ type: 'next' }), { signal })
+  const markCompletedOnContinue = () => {
+    completedReported = true
+    host.onProgress?.(state.stepIndex, steps.length, true)
+  }
+  railPrevBtn.addEventListener('click', () => dispatch({ type: 'prev' }), { signal })
+  railNextBtn.addEventListener('click', () => dispatch({ type: 'next' }), { signal })
+  railContinueLink.addEventListener('click', markCompletedOnContinue, { signal })
+  transportContinueLink.addEventListener('click', markCompletedOnContinue, { signal })
   playBtn.addEventListener('click', () => dispatch({ type: 'toggle-autoplay' }), { signal })
   replayBtn.addEventListener('click', () => dispatch({ type: 'replay-step' }), { signal })
   fitBtn.addEventListener('click', () => dispatch({ type: 'toggle-fit' }), { signal })
   inspectBtn.addEventListener('click', () => dispatch({ type: 'toggle-inspect' }), { signal })
+  stageCueBtn.addEventListener('click', () => {
+    if (pinnedPart) clearPin()
+    dispatch({ type: 'toggle-inspect' })
+  }, { signal })
   popCloseBtn.addEventListener('click', () => clearPin(), { signal })
 
   rateSelect.addEventListener('change', () => {
