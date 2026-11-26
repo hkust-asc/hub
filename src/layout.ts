@@ -161,6 +161,7 @@ export function createLayout(): string {
       <div class="brand-group"><button class="icon-button mobile-menu" type="button" id="menu-button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" title="Navigation">${icon('menu')}</button><a class="brand" href="#atlas" id="brand-link"><span class="brand-symbol">${icon('box')}</span><span>HPC4 <span class="brand-divider">/</span> <strong>hub</strong></span></a></div>
       <nav class="top-modes" aria-label="Learning modes">${modeLinks('mode-tab')}</nav>
       <div class="top-tools"><button class="search-trigger" id="open-switcher" type="button" title="Search all modes (Ctrl+K)" aria-label="Search all modes" aria-keyshortcuts="Control+K Meta+K">${icon('search')}<span class="search-trigger-label">Search</span><kbd class="search-kbd" id="search-kbd">Ctrl K</kbd></button>
+      <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false" title="Dark mode"><span class="theme-icon-moon">${icon('moon')}</span><span class="theme-icon-sun">${icon('sun')}</span></button>
       <button class="evidence-button" id="open-evidence" type="button" aria-label="Illustrative topology" title="Sources and illustrative assumptions"><span class="evidence-dot"></span><span class="evidence-label">Illustrative topology</span>${icon('info')}</button></div>
     </header>
     <div class="app-layout">

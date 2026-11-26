@@ -7,6 +7,16 @@
     <meta name="theme-color" content="#f5f6f7" />
     <meta name="description" content="Learn HPC mechanisms through visual walkthroughs, simulated Linux missions, ASC workshop quests, and permanent concept cards. Explore HPC4 hardware with clearly marked illustrative wiring." />
     <title>HPC4 Hub / Learning explorer</title>
+    <script>
+      ;(function () {
+        var t
+        try { t = localStorage.getItem('hpc4:theme') } catch (e) {}
+        if (t !== 'light' && t !== 'dark') {
+          try { t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' } catch (e) { t = 'light' }
+        }
+        document.documentElement.dataset.theme = t
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

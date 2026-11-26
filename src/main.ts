@@ -5,7 +5,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
 import './platform/platform.css'
 import './stage/stage.css'
-import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X } from 'lucide'
+import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
   entriesForCategory,
@@ -33,8 +33,9 @@ import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPositio
 import { lessonContinuation, lessonLinks } from './platform/links'
 import { progressStore } from './practice/engine/storage'
 import { weeks } from './platform/curriculum'
+import { initThemeToggle } from './theme'
 
-const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Terminal, X }
+const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lessonLoaders: Record<LessonId, () => Promise<{ lesson: StageScenarioOptions<any> }>> = {
@@ -763,6 +764,7 @@ const openEvidence = () => {
   dialog.showModal()
 }
 element('open-evidence').addEventListener('click', openEvidence)
+initThemeToggle(element('theme-toggle') as HTMLButtonElement)
 element('close-evidence').addEventListener('click', () => dialog.close())
 dialog.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
