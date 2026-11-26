@@ -36,19 +36,23 @@ function syncButton(button: HTMLButtonElement, theme: Theme) {
 }
 
 export function initThemeToggle(button: HTMLButtonElement) {
+  // Kept in memory too, so an explicit choice still wins when storage is unavailable.
+  let chosen = storedTheme() !== undefined
   applyTheme(storedTheme() ?? systemTheme())
   syncButton(button, currentTheme())
 
   button.addEventListener('click', () => {
     const next: Theme = currentTheme() === 'dark' ? 'light' : 'dark'
+    chosen = true
     applyTheme(next)
     syncButton(button, next)
     try { window.localStorage.setItem(KEY, next) } catch { /* storage unavailable: theme lasts this visit */ }
   })
 
   // Follow the OS setting until the reader picks a theme explicitly.
-  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', event => {
-    if (storedTheme()) return
+  // Older Safari has no addEventListener on MediaQueryList; skip following there rather than throw.
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', event => {
+    if (chosen) return
     const next: Theme = event.matches ? 'dark' : 'light'
     applyTheme(next)
     syncButton(button, next)
