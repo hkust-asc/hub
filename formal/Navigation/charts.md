@@ -1,6 +1,6 @@
 # Navigation, async lesson mount, and overlay Escape
 
-Fixed `/statechart` overview for `src/main.ts`, `src/catalog.ts`, `src/platform/search.ts`, and `src/stage/player.ts`. The projection groups Atlas and Explore cutaway routes (`s0`), collapses superseded background imports that `lessonLoadToken` discards, and separates modal dialogs (`s2`), the mobile drawer (`s3`), and the four scenario stage states (`s4`–`s7`). Notice there is no arrow from `s2` or `s3` back to `s5` (`Scenario · autoplay`): opening Search, Evidence, or the mobile drawer pauses active scenario autoplay (`OverlayExclusivityAndPause`).
+Fixed `/statechart` overview for `src/main.ts`, `src/catalog.ts`, `src/platform/search.ts`, and `src/stage/player.ts`. The projection groups Atlas and Explore cutaway routes (`s0`), collapses superseded background imports that `lessonLoadToken` discards, and separates modal dialogs (`s2`), the mobile drawer (`s3`), and the four scenario stage states (`s4`–`s7`). Notice there is no arrow from `s2` or `s3` back to `s5` (`Scenario · autoplay`): opening Search or the mobile drawer pauses active scenario autoplay (`OverlayExclusivityAndPause`).
 
 ```mermaid
 stateDiagram-v2
@@ -95,7 +95,7 @@ Each `Escape` press peels exactly one active surface from top to bottom without 
 
 ```mermaid
 stateDiagram-v2
-  state "Modal dialog (<dialog#switcher> or <dialog#evidence-dialog>)" as Modal
+  state "Modal dialog (<dialog#switcher>)" as Modal
   state "Mobile navigation drawer (body.navigation-open)" as Drawer
   state "Stage Inspect · component pinned (pinnedPart)" as Pinned
   state "Stage Inspect · browsing parts (state.inspecting)" as Inspect

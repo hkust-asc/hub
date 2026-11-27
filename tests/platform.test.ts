@@ -79,6 +79,61 @@ test('search distinguishes the stdout walkthrough, the simulation and the refere
   assert.ok(!searchDestinations('').some(item => item.route.includes('planned')))
 })
 
+test('Resources is discoverable in the switcher and can be revisited through Think Back', async () => {
+  const { searchDestinations } = await import('../src/platform/search.ts')
+  assert.ok(searchDestinations('resources').some(item => item.route === '#resources'))
+  const route = parseRoute('#resources')
+  assert.equal(trailSnapshotForCurrent(route, '#resources', initialState).route, '#resources')
+  assert.equal(fallbackBackTarget(route, initialState), null)
+  const materials = parseRoute('#resources/asc01')
+  assert.deepEqual(materials, { view: 'resources', detail: 'asc01' })
+  assert.equal(trailSnapshotForCurrent(materials, '#resources/asc01', initialState).route, '#resources/asc01')
+  assert.equal(fallbackBackTarget(materials, initialState)?.route, '#resources')
+  assert.deepEqual(parseRoute('#resources/asc01/unknown'), route)
+  assert.deepEqual(parseRoute('#resources/slurm-2023'), parseRoute('#resources/archer2'))
+})
+
+test('workshop and collection rows are title links and ordinary references use accessible arrow links', async () => {
+  const { renderResourceResults } = await import('../src/platform/resources.ts')
+  const all = renderResourceResults('all')
+  assert.match(all.html, /HPC4 user guide[\s\S]*datetime="2026-11-25"[\s\S]*datetime="2026-11-18"[\s\S]*Shared references[\s\S]*href="#resources\/archer2"/)
+  assert.doesNotMatch(all.html, /Workshop exercises|Follow in Weeks|Recording \(Zoom\)|Slides \(PDF\): Slurm/)
+  assert.match(all.html, /aria-label="Open resource: Linux shell crash course"><span aria-hidden="true">↗<\/span><\/a>/)
+  assert.match(all.html, /aria-label="Open resource: 2026 HPC tutorials"><span aria-hidden="true">↗<\/span><\/a>/)
+
+  const search = renderResourceResults('recording', '  OPENACC 6 October 2026  ')
+  assert.equal(search.status, '1 entry')
+  assert.match(search.html, /href="#resources\/archer2"[^>]*>ARCHER2 training/)
+  assert.doesNotMatch(search.html, /GPU programming using OpenMP|href="https:/)
+})
+
+test('ARCHER2 details retain all three courses and their material links', async () => {
+  const { getResourcePage } = await import('../src/platform/resource-catalog.ts')
+  const { renderResourcePage } = await import('../src/platform/resources.ts')
+  const collection = renderResourcePage(getResourcePage('archer2')!)
+  assert.equal(collection.match(/class="resource-row"/g)?.length, 3)
+  assert.match(collection, /Recordings: GPU programming using OpenMP[\s\S]*Slides \(PDF\): Slurm job scheduling[\s\S]*Exercises \(PDF\): Message-passing/)
+})
+
+test('both workshop details link to distinct Zoom recordings and keep their exercise links', async () => {
+  const { getResourcePage } = await import('../src/platform/resource-catalog.ts')
+  const { renderResourcePage, renderResourceResults } = await import('../src/platform/resources.ts')
+  const week = renderResourcePage(getResourcePage('asc01')!)
+  assert.match(week, /href="https:\/\/github\.com\/hkust-asc\/ws26-01-linux-git#quest-1-connect-and-explore"[^>]*>Workshop exercises/)
+  assert.match(week, /href="#weeks\/asc01"[^>]*>Follow in Weeks/)
+
+  const curriculum = renderResourcePage(getResourcePage('asc27-first-principles')!)
+  assert.match(curriculum, /Related MPI exercises \(PDF\)/)
+  const replay = /href="(https:\/\/hkust\.zoom\.us\/rec\/share\/[A-Za-z0-9._-]+)" target="_blank" rel="noopener noreferrer" aria-label="Recording \(Zoom\):/
+  const weekReplay = week.match(replay)
+  const curriculumReplay = curriculum.match(replay)
+  assert.ok(weekReplay && curriculumReplay)
+  assert.notEqual(weekReplay[1], curriculumReplay[1])
+  const filtered = renderResourceResults('recording', 'zoom 2026-11-25')
+  assert.equal(filtered.status, '1 entry')
+  assert.match(filtered.html, /href="#resources\/asc27-first-principles"[^>]*>ASC01: ASC27 First-Principles Curriculum/)
+})
+
 test('unlock-all-missions preference persists across reloads and practice groups cover every mission', async () => {
   const { LearningProgress } = await import('../src/platform/progress.ts')
   const { practiceGroups } = await import('../src/platform/curriculum.ts')

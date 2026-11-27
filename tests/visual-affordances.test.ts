@@ -160,7 +160,9 @@ test('interactive cues and Practice mission navigation reflect inspect state and
   assert.match(describeStageCue(false, false), /Click any block to inspect \(I\)/)
   assert.match(describeStageCue(true, false), /Inspect active.*Esc to exit/)
   assert.match(describeStageCue(true, true), /Esc to close/)
-  assert.match(createLayout(), /id="view-click-cue"/)
+  const layout = createLayout()
+  assert.match(layout, /id="view-click-cue"/)
+  assert.doesNotMatch(layout, /id="open-evidence"|id="evidence-dialog"|Illustrative topology/)
 
   const game = new Game()
   const navStart = describeMissionNav(levels, 1, id => game.isUnlocked(id))
@@ -211,6 +213,7 @@ test('concept sheets expose domain-scoped Prev/Next strips and Week views advanc
   const progress = new LearningProgress()
   const game = new Game()
   const freshWeek = renderWeekView('asc01', progress, game)
+  assert.match(freshWeek, /href="#resources\/asc01"[^>]*>Workshop materials/)
   assert.match(freshWeek, /week-step-pill is-current" data-week-stage="01"/)
   assert.match(freshWeek, /data-week-lesson="linux-fs" data-status="next"/)
   assert.match(freshWeek, /Start 01 \/ Learn: Linux tree →/)

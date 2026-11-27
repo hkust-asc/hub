@@ -31,7 +31,7 @@ export function state(current) {
 }
 
 export function step(action, before, after) {
-  if (action === "OpenSearch" || action === "OpenEvidence") return "open modal dialog";
+  if (action === "OpenSearch") return "open modal dialog";
   if (action === "OpenDrawer") return "open mobile drawer";
   if (action === "NavigateTo") {
     return after.route === "lesson_gpu" || after.route === "lesson_ssh"

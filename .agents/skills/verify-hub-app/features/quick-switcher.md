@@ -19,7 +19,7 @@ Quick Switcher lets a learner search across modes, guided scenarios, interactive
 Preconditions:
 
 - `control-hub.ts doctor --run-id "$RUN_ID"` reports `"status": "healthy"`.
-- Neither `<dialog#switcher>` nor `<dialog#evidence-dialog>` is currently open.
+- `<dialog#switcher>` is not currently open.
 
 - **Run automated journey.** Execute `node .agents/skills/verify-hub-app/scripts/control-hub.ts drive --run-id "$RUN_ID" --evidence-dir "$EVIDENCE_DIR" --journey search`. Exit code is `0` and `02-quick-switcher-streams.png` is written.
 - **Trigger via keyboard.** Dispatch `Control+K` on `document`. `<dialog id="switcher">` opens with focus in `#switch-input`.
@@ -29,4 +29,3 @@ Preconditions:
 ## Gotchas
 
 - `#switcher` stops `keydown` propagation (`event.stopPropagation()`) so arrow keys and `Escape` inside search never step an open scenario or exit Stage Inspect underneath.
-- Opening `#switcher` while `<dialog#evidence-dialog>` is open is intentionally ignored (`if (searchDialog.open || dialog.open) return`).

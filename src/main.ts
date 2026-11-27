@@ -5,7 +5,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
 import './platform/platform.css'
 import './stage/stage.css'
-import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X } from 'lucide'
+import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
   entriesForCategory,
@@ -30,12 +30,13 @@ import type { Action, AppState, ClusterTopicId, SceneId, TopicId } from './model
 import { mountStageScenario } from './stage/player'
 import type { MountedStageScenario, StageScenarioOptions } from './stage/types'
 import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPosition } from './platform/progress'
-import { lessonContinuation, lessonLinks } from './platform/links'
+import { escapeHtml, lessonContinuation, lessonLinks } from './platform/links'
 import { progressStore } from './practice/engine/storage'
 import { weeks } from './platform/curriculum'
+import { resourcePageTitle, resourcesRoute } from './platform/resource-catalog'
 import { initThemeToggle } from './theme'
 
-const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
+const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lessonLoaders: Record<LessonId, () => Promise<{ lesson: StageScenarioOptions<any> }>> = {
@@ -107,6 +108,7 @@ function canonicalHash(): string {
   if (currentRoute.view === 'learn') return '#learn'
   if (currentRoute.view === 'practice') return currentRoute.mission ? `#practice/${currentRoute.mission}` : '#practice'
   if (currentRoute.view === 'weeks') return currentRoute.week ? `#weeks/${currentRoute.week}` : '#weeks'
+  if (currentRoute.view === 'resources') return resourcesRoute(currentRoute.detail)
   if (currentRoute.view === 'concept') return `#atlas/concept/${currentRoute.id}`
   if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
@@ -408,10 +410,11 @@ function render(): void {
   lessonView.hidden = currentRoute.view !== 'lesson'
   extras.hidden = lessonView.hidden
   const page = currentRoute
-  platform.hidden = !['learn', 'practice', 'weeks', 'concept'].includes(page.view)
+  const isPlatformPage = page.view === 'learn' || page.view === 'practice' || page.view === 'weeks' || page.view === 'concept' || page.view === 'resources'
+  platform.hidden = !isPlatformPage
   if (platform.hidden) platform.replaceChildren()
   const mode = page.view === 'lesson' || page.view === 'learn' ? 'learn'
-    : page.view === 'practice' || page.view === 'weeks' ? page.view : 'atlas'
+    : page.view === 'practice' || page.view === 'weeks' || page.view === 'resources' ? page.view : 'atlas'
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach(a => {
     if (a.dataset.mode === mode) a.setAttribute('aria-current', 'location')
     else a.removeAttribute('aria-current')
@@ -426,17 +429,19 @@ function render(): void {
   let breadcrumb = 'Atlas'
   let sceneRef = ''
 
-  if (page.view === 'learn' || page.view === 'practice' || page.view === 'weeks' || page.view === 'concept') {
+  if (isPlatformPage) {
     title = page.view === 'learn' ? 'Guided walkthroughs'
       : page.view === 'practice' ? (page.mission ? `Practice · Mission ${page.mission}` : 'Practice missions')
-      : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops') : getEntry(page.id)!.title
+      : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops')
+      : page.view === 'resources' ? resourcePageTitle(page.detail)
+      : getEntry(page.id)!.title
     breadcrumb = page.view === 'concept' ? `Atlas / ${getCategory(getEntry(page.id)!.category).shortName}` : mode[0].toUpperCase() + mode.slice(1)
     platform.textContent = 'Loading…'
     void loadViews().then(({ showPage }) => {
       if (currentRoute === page) showPage(platform, page, learning)
     }).catch(error => {
-      console.error('Could not open learning mode', error)
-      if (currentRoute === page) platform.textContent = 'This learning view could not be loaded. Reload to try again.'
+      console.error('Could not open Hub page', error)
+      if (currentRoute === page) platform.textContent = 'This page could not be loaded. Reload to try again.'
     })
   } else if (currentRoute.view === 'atlas') {
     title = atlasMode === 'domains' ? 'Explore by domain' : 'Concept & scenario atlas'
@@ -480,7 +485,7 @@ function render(): void {
     triggerModestSettle(workbench, `workbench:${state.scene}`)
   }
 
-  element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
+  element('page-title').innerHTML = `${escapeHtml(title)}<span class="title-period">.</span>`
   element('breadcrumb-section').textContent = breadcrumb
   const refEl = element('scene-reference')
   refEl.hidden = !sceneRef
@@ -756,28 +761,7 @@ element('local-button').addEventListener('click', () => dispatchScene({ type: 'p
 element('remote-button').addEventListener('click', () => dispatchScene({ type: 'placement', placement: 'remote' }))
 element('explode-button').addEventListener('click', () => dispatchScene({ type: 'explode' }))
 element('reset-button').addEventListener('click', () => dispatchScene({ type: 'reset-view' }))
-const dialog = element<HTMLDialogElement>('evidence-dialog')
-const openEvidence = () => {
-  activeLesson?.mounted.pause()
-  hidePreview()
-  closeNavigation()
-  dialog.showModal()
-}
-element('open-evidence').addEventListener('click', openEvidence)
 initThemeToggle(element('theme-toggle') as HTMLButtonElement)
-element('close-evidence').addEventListener('click', () => dialog.close())
-dialog.addEventListener('keydown', event => {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    dialog.close()
-  }
-})
-dialog.addEventListener('click', event => {
-  if (event.target !== dialog) return
-  const bounds = dialog.getBoundingClientRect()
-  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close()
-})
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) learning.save()
 })
@@ -868,7 +852,7 @@ element('download-button').addEventListener('click', () => {
 const searchDialog = element<HTMLDialogElement>('switcher')
 let switcherReady: Promise<void> | undefined
 async function openSwitcher() {
-  if (searchDialog.open || dialog.open) return
+  if (searchDialog.open) return
   activeLesson?.mounted.pause()
   closeNavigation()
   hidePreview()

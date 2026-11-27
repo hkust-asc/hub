@@ -55,7 +55,7 @@ test('canonical route graph enumerates every mode, hub, concept, scene, topic, s
   assert.equal(report.reachableCount, report.nodeCount)
 
   // Verify every canonical route family is present
-  for (const root of ['#learn', '#practice', '#weeks', '#atlas', '#atlas/domains']) {
+  for (const root of ['#learn', '#practice', '#weeks', '#atlas', '#atlas/domains', '#resources']) {
     assert.ok(graph.nodeMap.has(root), `Missing root ${root}`)
   }
   for (const cat of categories) {

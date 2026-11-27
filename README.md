@@ -38,6 +38,10 @@ This runs all `tests/*.test.ts` suites (including sandbox replays) and the produ
 
 Use **Ctrl/Cmd+K** to jump across modes (arrows, Enter, Escape). On smaller screens the modes are in the navigation drawer. Legacy `#scenario/first-job` and `?lesson=...` links still resolve.
 
+**Resources** (`#resources`) is the public directory for workshop materials, HPC4 setup, and shared references. Search by title, date, or topic, or filter for recordings, summaries, and slides. Workshops appear newest first; click a workshop or collection title to see its materials. **Workshop materials** in a weekly brief opens its entry (e.g. `#resources/asc01`); **Follow in Weeks** returns to the guided activities. **ARCHER2 training** under Shared references opens all three courses at `#resources/archer2`. The old ARCHER2 course URLs still open that collection.
+
+**For resource curators:** Edit [resource-catalog.json](src/platform/resource-catalog.json); no TypeScript change is needed for entries. Add a reference with `title`, `source`, `use` and `href`; the Hub renders an arrow link with an accessible label. A workshop also needs a stable `id` and `links` with a `label` and `href`; use `date` (`YYYY-MM-DD`) if known, and `weekId` only for a matching weekly brief. Use `format` (`recording`, `summary` or `slides`) when a link should appear under a format filter. Link directly to exercises when available. For Zoom, use **Recording (Zoom)** with format `recording` and an instructor-approved share URL. Do not include meeting invites or passcodes.
+
 Learn bookmarks/completion, field checkboxes, practice completions and simulated command history stay in this browser. Do not enter real credentials. Visiting a lesson or card and returning to the same mission keeps its live terminal; restarting a mission, selecting another mission or reloading the page starts a fresh simulated filesystem. **Reset practice progress** clears the practice records, not the weekly checklist or lesson bookmarks.
 
 **For lesson authors:** register a scenario in the catalog and lesson loader as before; Learn and search pick it up automatically. Add optional pairings in `src/platform/links.ts` or `src/platform/curriculum.ts`. Neither lesson rendering nor the build requires a checkout of the workshop repos. The port is based on Linux X-Ray at `6effdce`; Week 01 is based on the workshop brief at `e6a434e`.
@@ -58,7 +62,6 @@ Learn bookmarks/completion, field checkboxes, practice completions and simulated
 - Step through scenarios at your own pace with **Prev** / **Next** (`←` / `→`) or step pills, toggle **Auto** (`Space`, with `0.5x` / `1x` / `2x` speed) for hands-free playback, replay the current step's causal beat with **R**, toggle full-diagram framing with **Fit** (`0`), or inspect individual components with **Inspect** (`I`).
 - Compare local and cross-socket CPU/memory placement in both the Explore A30 view and **Host to GPU**.
 - Separate the node drawing's layers, reset the node view, or export its SVG.
-- Open Illustrative topology for sources and assumptions. Diagram links are not a measured wiring map.
 - Scene, subject, and step URLs such as `#cluster/lmod`, `#a30/numa`, and `#lesson/streams/3` support direct links and browser Back.
 
 The published A30 profile has two Xeon Gold 6448Y sockets, four A30 GPUs with 24 GB HBM2 each, and 512 GB DDR5 host memory. These figures and the overview's other node-family profiles come from the [official HPC4 specification](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4), checked on 2026-10-19. Storage notes follow the [official storage policies](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4/fileandstorage).

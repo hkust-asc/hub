@@ -140,14 +140,6 @@ OpenSearch ==
   /\ escapeLeaked' = FALSE
   /\ UNCHANGED <<route, trail, currentLoad, staleLoad, mounted, mountCount>>
 
-OpenEvidence ==
-  /\ modal = "none"
-  /\ modal' = "evidence"
-  /\ drawerOpen' = FALSE
-  /\ stageState' = PauseIfPlaying(stageState)
-  /\ escapeLeaked' = FALSE
-  /\ UNCHANGED <<route, trail, currentLoad, staleLoad, mounted, mountCount>>
-
 OpenDrawer ==
   /\ modal = "none" /\ ~drawerOpen
   /\ drawerOpen' = TRUE
@@ -188,7 +180,7 @@ Next ==
   \/ SelectWorkbenchSubject \/ ThinkBack
   \/ ResolveCurrentLoad \/ ResolveStaleLoad
   \/ StartStageAutoplay \/ EnterStageInspect \/ PinStagePart
-  \/ OpenSearch \/ OpenEvidence \/ OpenDrawer \/ SwitchViaSearch \/ PressEscape
+  \/ OpenSearch \/ OpenDrawer \/ SwitchViaSearch \/ PressEscape
 
 MountedMatchesActiveLesson ==
   /\ (mounted /= "none" => (route = mounted /\ mountCount = 1))

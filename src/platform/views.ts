@@ -12,8 +12,10 @@ import type { WorkshopWeek } from './curriculum.ts'
 import { conceptNeighbors, conceptsForLesson, escapeHtml as esc, lessonLinks, link } from './links.ts'
 import { browserStorage } from './progress.ts'
 import type { LearningProgress } from './progress.ts'
+import { getResourcePage } from './resource-catalog.ts'
+import { renderWorkshopMaterialsLink, showResources } from './resources.ts'
 
-type Page = Extract<ParsedRoute, { view: 'learn' | 'practice' | 'weeks' | 'concept' }>
+type Page = Extract<ParsedRoute, { view: 'learn' | 'practice' | 'weeks' | 'concept' | 'resources' }>
 let practice: PracticeDesk | undefined
 function desk() { return practice ??= new PracticeDesk(new Game(browserStorage())) }
 
@@ -202,7 +204,10 @@ export function renderWeekView(
   } = computeWeekProgression(w, progress, gameInstance)
 
   return `<nav class="week-top-bar" aria-label="Workshop navigation">
-      <a class="mode-link" data-route="#weeks" href="#weeks">← All weeks</a>
+      <div class="week-navigation-links">
+        <a class="mode-link" data-route="#weeks" href="#weeks">← All weeks</a>
+        ${renderWorkshopMaterialsLink(w.id)}
+      </div>
       <div class="week-recommended">
         <span class="week-rec-label">Recommended next</span>
         ${renderWeekNextAction(recommended)}
@@ -288,6 +293,10 @@ export function renderWeekView(
 }
 
 export function showPage(host: HTMLElement, route: Page, progress: LearningProgress) {
+  if (route.view === 'resources') {
+    showResources(host, route.detail ? getResourcePage(route.detail)! : undefined)
+    return
+  }
   const d = desk()
   d.game.setUnlockAll(progress.unlockAllMissions)
   if (route.view === 'practice') {
