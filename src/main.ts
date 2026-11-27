@@ -5,7 +5,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import './app.css'
 import './platform/platform.css'
 import './stage/stage.css'
-import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X } from 'lucide'
+import { createIcons, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X } from 'lucide'
 import {
   activeEntryForState,
   entriesForCategory,
@@ -36,7 +36,7 @@ import { weeks } from './platform/curriculum'
 import { resourcePageTitle, resourcesRoute } from './platform/resource-catalog'
 import { initThemeToggle } from './theme'
 
-const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
+const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lessonLoaders: Record<LessonId, () => Promise<{ lesson: StageScenarioOptions<any> }>> = {
@@ -761,28 +761,7 @@ element('local-button').addEventListener('click', () => dispatchScene({ type: 'p
 element('remote-button').addEventListener('click', () => dispatchScene({ type: 'placement', placement: 'remote' }))
 element('explode-button').addEventListener('click', () => dispatchScene({ type: 'explode' }))
 element('reset-button').addEventListener('click', () => dispatchScene({ type: 'reset-view' }))
-const dialog = element<HTMLDialogElement>('evidence-dialog')
-const openEvidence = () => {
-  activeLesson?.mounted.pause()
-  hidePreview()
-  closeNavigation()
-  dialog.showModal()
-}
-element('open-evidence').addEventListener('click', openEvidence)
 initThemeToggle(element('theme-toggle') as HTMLButtonElement)
-element('close-evidence').addEventListener('click', () => dialog.close())
-dialog.addEventListener('keydown', event => {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    dialog.close()
-  }
-})
-dialog.addEventListener('click', event => {
-  if (event.target !== dialog) return
-  const bounds = dialog.getBoundingClientRect()
-  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close()
-})
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) learning.save()
 })
@@ -873,7 +852,7 @@ element('download-button').addEventListener('click', () => {
 const searchDialog = element<HTMLDialogElement>('switcher')
 let switcherReady: Promise<void> | undefined
 async function openSwitcher() {
-  if (searchDialog.open || dialog.open) return
+  if (searchDialog.open) return
   activeLesson?.mounted.pause()
   closeNavigation()
   hidePreview()

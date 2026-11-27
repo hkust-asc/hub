@@ -219,16 +219,16 @@ export const STATE_MACHINES: readonly StateMachineSpec[] = [
     ],
     states: [
       'AppState: scene in {cluster, a30}, clusterSelected in ClusterTopicId, selected in TopicId, placement in {local, remote}, exploded: boolean',
-      'Overlay stack: switcher-modal (<dialog#switcher>) | evidence-modal (<dialog#evidence-dialog>) | mobile-drawer (.navigation-open) | entry-preview | stage-inspect(pinnedPart)',
+      'Overlay stack: switcher-modal (<dialog#switcher>) | mobile-drawer (.navigation-open) | entry-preview | stage-inspect(pinnedPart)',
     ],
     events: [
       'updateState(select | cluster-select | browse | navigate | placement | explode | reset-view | reset)',
-      'openSwitcher (Ctrl+K) / openEvidence / toggleMobileDrawer',
+      'openSwitcher (Ctrl+K) / toggleMobileDrawer',
       'Escape key dispatch across active overlay layers',
     ],
     invariants: [
       'reset-view restores placement = local and exploded = false while preserving the active scene, selected subject, and saved scenario bookmarks.',
-      'Opening switcher, evidence dialog, or mobile drawer pauses active scenario autoplay and dismisses hover tooltips; switcher and evidence modals are mutually exclusive.',
+      'Opening switcher or mobile drawer pauses active scenario autoplay and dismisses hover tooltips.',
       'Escape obeys strict top-down precedence: modal dialog -> mobile navigation drawer -> pinned Stage component -> Stage Inspect mode, never leaking to lower layers on a single keypress.',
     ],
     verification: {

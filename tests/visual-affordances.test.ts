@@ -160,7 +160,9 @@ test('interactive cues and Practice mission navigation reflect inspect state and
   assert.match(describeStageCue(false, false), /Click any block to inspect \(I\)/)
   assert.match(describeStageCue(true, false), /Inspect active.*Esc to exit/)
   assert.match(describeStageCue(true, true), /Esc to close/)
-  assert.match(createLayout(), /id="view-click-cue"/)
+  const layout = createLayout()
+  assert.match(layout, /id="view-click-cue"/)
+  assert.doesNotMatch(layout, /id="open-evidence"|id="evidence-dialog"|Illustrative topology/)
 
   const game = new Game()
   const navStart = describeMissionNav(levels, 1, id => game.isUnlocked(id))

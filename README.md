@@ -62,7 +62,6 @@ Learn bookmarks/completion, field checkboxes, practice completions and simulated
 - Step through scenarios at your own pace with **Prev** / **Next** (`←` / `→`) or step pills, toggle **Auto** (`Space`, with `0.5x` / `1x` / `2x` speed) for hands-free playback, replay the current step's causal beat with **R**, toggle full-diagram framing with **Fit** (`0`), or inspect individual components with **Inspect** (`I`).
 - Compare local and cross-socket CPU/memory placement in both the Explore A30 view and **Host to GPU**.
 - Separate the node drawing's layers, reset the node view, or export its SVG.
-- Open Illustrative topology for sources and assumptions. Diagram links are not a measured wiring map.
 - Scene, subject, and step URLs such as `#cluster/lmod`, `#a30/numa`, and `#lesson/streams/3` support direct links and browser Back.
 
 The published A30 profile has two Xeon Gold 6448Y sockets, four A30 GPUs with 24 GB HBM2 each, and 512 GB DDR5 host memory. These figures and the overview's other node-family profiles come from the [official HPC4 specification](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4), checked on 2026-10-19. Storage notes follow the [official storage policies](https://itso.hkust.edu.hk/services/academic-teaching-support/high-performance-computing/hpc4/fileandstorage).
