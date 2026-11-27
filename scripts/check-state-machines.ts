@@ -29,8 +29,8 @@ import { moduleSteps } from '../src/module-load/story.ts'
 import { codex, conceptForAward } from '../src/platform/codex.ts'
 import { missionLessons, practiceGroups, weeks } from '../src/platform/curriculum.ts'
 import { conceptsForLesson, entryLink, lessonLinks } from '../src/platform/links.ts'
-import { getWorkshopResource, resourcesRoute, workshopResources } from '../src/platform/resource-catalog.ts'
-import { renderResourceResults, renderWorkshopMaterialsLink, renderWorkshopResources } from '../src/platform/resources.ts'
+import { getResourcePage, resourceCollections, resourcePages, resourcesRoute, workshopResources } from '../src/platform/resource-catalog.ts'
+import { renderResourcePage, renderResourceResults, renderWorkshopMaterialsLink } from '../src/platform/resources.ts'
 import { searchDestinations } from '../src/platform/search.ts'
 import { levels } from '../src/practice/engine/levels/index.ts'
 import { sshSteps } from '../src/ssh-tmux/story.ts'
@@ -71,7 +71,7 @@ export const STATE_MACHINES: readonly StateMachineSpec[] = [
       'learn (#learn)',
       'practice-index (#practice) & practice-mission (#practice/1..6)',
       'weeks-index (#weeks) & week-detail (#weeks/asc01)',
-      'resource-directory (#resources) & workshop materials (#resources/<id>)',
+      'resource-directory (#resources) & workshop/collection details (#resources/<id>)',
       'atlas-all (#atlas) & atlas-domains (#atlas/domains)',
       'domain-hub (#atlas/<category>)',
       'concept-sheet (#atlas/concept/<id>)',
@@ -250,7 +250,7 @@ export const LESSON_STEP_COUNTS: Readonly<Record<LessonId, number>> = {
 export type RouteNodeKind =
   | 'mode-index'
   | 'directory'
-  | 'workshop-resources'
+  | 'resource-detail'
   | 'domain-hub'
   | 'concept'
   | 'scene'
@@ -317,7 +317,7 @@ export function canonicalizeParsedRoute(parsed: ParsedRoute, sceneState: AppStat
     case 'weeks':
       return parsed.week ? `#weeks/${parsed.week}` : '#weeks'
     case 'resources':
-      return resourcesRoute(parsed.workshop)
+      return resourcesRoute(parsed.detail)
     case 'concept':
       return `#atlas/concept/${parsed.id}`
     case 'atlas':
@@ -363,10 +363,9 @@ function isStrictValidHash(rawHash: string): { valid: boolean; reason?: string; 
   }
   if (head === 'resources') {
     if (segments.length === 1) return { valid: true, canonical: resourcesRoute() }
-    if (segments.length === 2 && tail && getWorkshopResource(tail)) {
-      return { valid: true, canonical: resourcesRoute(tail) }
-    }
-    return { valid: false, reason: `Unknown workshop materials route '${rawHash}'` }
+    const page = segments.length === 2 && tail ? getResourcePage(tail) : undefined
+    if (page) return { valid: true, canonical: resourcesRoute(page.id) }
+    return { valid: false, reason: `Unknown resource detail route '${rawHash}'` }
   }
   if (head === 'practice') {
     if (segments.length === 1) return { valid: true, canonical: '#practice' }
@@ -448,8 +447,8 @@ export function buildLinkGraph(): LinkGraph {
   addNode('#atlas', 'mode-index', 'Concept & scenario atlas (All)')
   addNode('#atlas/domains', 'mode-index', 'Explore by domain')
   addNode(resourcesRoute(), 'directory', 'Resources')
-  for (const workshop of workshopResources) {
-    addNode(resourcesRoute(workshop.id), 'workshop-resources', workshop.title)
+  for (const page of resourcePages) {
+    addNode(resourcesRoute(page.id), 'resource-detail', page.title)
   }
 
   // 2. Domain hubs
@@ -596,13 +595,13 @@ export function buildLinkGraph(): LinkGraph {
     }
   }
 
-  // Resources directory and workshop materials
+  // Resources directory and workshop/collection details
   for (const href of extractHtmlRoutes(renderResourceResults('all').html)) {
     addEdge(resourcesRoute(), href, 'src/platform/resources.ts:renderResourceResults', 'content')
   }
-  for (const workshop of workshopResources) {
-    for (const href of extractHtmlRoutes(renderWorkshopResources(workshop))) {
-      addEdge(resourcesRoute(workshop.id), href, 'src/platform/resources.ts:renderWorkshopResources', 'content')
+  for (const page of resourcePages) {
+    for (const href of extractHtmlRoutes(renderResourcePage(page))) {
+      addEdge(resourcesRoute(page.id), href, 'src/platform/resources.ts:renderResourcePage', 'content')
     }
   }
 
@@ -809,6 +808,8 @@ export function verifyStateMachines(graph: LinkGraph = buildLinkGraph()): Verifi
     ['#a30/gpu', '#a30'],
     ['#scenario/gpu-copy', '#lesson/host-to-gpu'],
     ['#scenario/first-job', '#lesson/first-job'],
+    ...resourceCollections.flatMap(collection => collection.courses.map<[string, string]>(course =>
+      [resourcesRoute(course.id), resourcesRoute(collection.id)])),
   ]
   for (const [alias, expected] of aliasExpectations) {
     const parsed = parseRoute(alias)
@@ -1143,7 +1144,7 @@ export function renderMermaidStatecharts(graph: LinkGraph = buildLinkGraph()): s
     '  state "Weeks Index (#weeks)" as Weeks',
     `  state "Workshop Briefs (#weeks/asc01 · ${counts.get('week') ?? 0})" as WeekDetail`,
     '  state "Resources (#resources)" as Resources',
-    `  state "Workshop Materials (#resources/<id> · ${counts.get('workshop-resources') ?? 0})" as WorkshopMaterials`,
+    `  state "Resource Details (#resources/<id> · ${counts.get('resource-detail') ?? 0})" as ResourceDetails`,
     '',
     '  [*] --> Atlas',
     '  Atlas --> Hubs: domain shelf / group header',
@@ -1152,10 +1153,10 @@ export function renderMermaidStatecharts(graph: LinkGraph = buildLinkGraph()): s
     '  Atlas --> Stage: scenario tile',
     '  Atlas --> Resources: Hub navigation',
     '  Resources --> Atlas: Hub navigation',
-    '  Resources --> WorkshopMaterials: open workshop',
-    '  WorkshopMaterials --> Resources: Back to directory',
-    '  WeekDetail --> WorkshopMaterials: Workshop materials',
-    '  WorkshopMaterials --> WeekDetail: Follow in Weeks',
+    '  Resources --> ResourceDetails: open workshop or collection',
+    '  ResourceDetails --> Resources: Back to directory',
+    '  WeekDetail --> ResourceDetails: Workshop materials',
+    '  ResourceDetails --> WeekDetail: Follow in Weeks',
     '  Hubs --> Concepts: domain subject tile',
     '  Hubs --> Workbench: domain scene tile',
     '  Hubs --> Stage: domain scenario tile',

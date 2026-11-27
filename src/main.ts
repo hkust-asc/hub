@@ -30,10 +30,10 @@ import type { Action, AppState, ClusterTopicId, SceneId, TopicId } from './model
 import { mountStageScenario } from './stage/player'
 import type { MountedStageScenario, StageScenarioOptions } from './stage/types'
 import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPosition } from './platform/progress'
-import { lessonContinuation, lessonLinks } from './platform/links'
+import { escapeHtml, lessonContinuation, lessonLinks } from './platform/links'
 import { progressStore } from './practice/engine/storage'
 import { weeks } from './platform/curriculum'
-import { getWorkshopResource, resourcesRoute } from './platform/resource-catalog'
+import { resourcePageTitle, resourcesRoute } from './platform/resource-catalog'
 import { initThemeToggle } from './theme'
 
 const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
@@ -108,7 +108,7 @@ function canonicalHash(): string {
   if (currentRoute.view === 'learn') return '#learn'
   if (currentRoute.view === 'practice') return currentRoute.mission ? `#practice/${currentRoute.mission}` : '#practice'
   if (currentRoute.view === 'weeks') return currentRoute.week ? `#weeks/${currentRoute.week}` : '#weeks'
-  if (currentRoute.view === 'resources') return resourcesRoute(currentRoute.workshop)
+  if (currentRoute.view === 'resources') return resourcesRoute(currentRoute.detail)
   if (currentRoute.view === 'concept') return `#atlas/concept/${currentRoute.id}`
   if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
@@ -433,7 +433,7 @@ function render(): void {
     title = page.view === 'learn' ? 'Guided walkthroughs'
       : page.view === 'practice' ? (page.mission ? `Practice · Mission ${page.mission}` : 'Practice missions')
       : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops')
-      : page.view === 'resources' ? (page.workshop ? `${getWorkshopResource(page.workshop)!.title} materials` : 'Resources')
+      : page.view === 'resources' ? resourcePageTitle(page.detail)
       : getEntry(page.id)!.title
     breadcrumb = page.view === 'concept' ? `Atlas / ${getCategory(getEntry(page.id)!.category).shortName}` : mode[0].toUpperCase() + mode.slice(1)
     platform.textContent = 'Loading…'
@@ -485,7 +485,7 @@ function render(): void {
     triggerModestSettle(workbench, `workbench:${state.scene}`)
   }
 
-  element('page-title').innerHTML = `${title}<span class="title-period">.</span>`
+  element('page-title').innerHTML = `${escapeHtml(title)}<span class="title-period">.</span>`
   element('breadcrumb-section').textContent = breadcrumb
   const refEl = element('scene-reference')
   refEl.hidden = !sceneRef

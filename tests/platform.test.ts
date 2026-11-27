@@ -86,35 +86,51 @@ test('Resources is discoverable in the switcher and can be revisited through Thi
   assert.equal(trailSnapshotForCurrent(route, '#resources', initialState).route, '#resources')
   assert.equal(fallbackBackTarget(route, initialState), null)
   const materials = parseRoute('#resources/asc01')
-  assert.deepEqual(materials, { view: 'resources', workshop: 'asc01' })
+  assert.deepEqual(materials, { view: 'resources', detail: 'asc01' })
   assert.equal(trailSnapshotForCurrent(materials, '#resources/asc01', initialState).route, '#resources/asc01')
   assert.equal(fallbackBackTarget(materials, initialState)?.route, '#resources')
   assert.deepEqual(parseRoute('#resources/asc01/unknown'), route)
+  assert.deepEqual(parseRoute('#resources/slurm-2023'), parseRoute('#resources/archer2'))
 })
 
-test('workshops follow the starter guide newest first and search matches dates and topics', async () => {
+test('workshop and collection rows are title links and ordinary references use one visible action label', async () => {
   const { renderResourceResults } = await import('../src/platform/resources.ts')
   const all = renderResourceResults('all')
-  assert.match(all.html, /HPC4 user guide[\s\S]*datetime="2026-11-18"[\s\S]*datetime="2026-10-06"[\s\S]*datetime="2023-07-26"[\s\S]*datetime="2022-03-23"/)
-  const search = renderResourceResults('all', '  OPENACC 6 October 2026  ')
+  assert.match(all.html, /HPC4 user guide[\s\S]*datetime="2026-11-25"[\s\S]*datetime="2026-11-18"[\s\S]*Shared references[\s\S]*href="#resources\/archer2"/)
+  assert.doesNotMatch(all.html, /Workshop exercises|Follow in Weeks|Recording \(Zoom\)|Slides \(PDF\): Slurm/)
+  assert.match(all.html, /aria-label="Open resource: Linux shell crash course">Open resource/)
+  assert.match(all.html, /aria-label="Open resource: 2026 HPC tutorials">Open resource/)
+
+  const search = renderResourceResults('recording', '  OPENACC 6 October 2026  ')
   assert.equal(search.status, '1 entry')
-  assert.match(search.html, /GPU programming using OpenMP/)
-  assert.doesNotMatch(search.html, /Week 01|Start here/)
+  assert.match(search.html, /href="#resources\/archer2"[^>]*>ARCHER2 training/)
+  assert.doesNotMatch(search.html, /GPU programming using OpenMP|href="https:/)
 })
 
-test('resource search and format filters intersect without splitting a workshop’s links', async () => {
-  const { renderResourceResults } = await import('../src/platform/resources.ts')
-  const recordings = renderResourceResults('recording', 'sbatch 2023-07-26')
-  assert.equal(recordings.status, '1 entry')
-  assert.match(recordings.html, /Recording: Slurm job scheduling/)
-  assert.match(recordings.html, /Session overview: Slurm job scheduling/)
-  assert.match(recordings.html, /Slides \(PDF\): Slurm job scheduling/)
+test('ARCHER2 details retain all three courses and their material links', async () => {
+  const { getResourcePage } = await import('../src/platform/resource-catalog.ts')
+  const { renderResourcePage } = await import('../src/platform/resources.ts')
+  const collection = renderResourcePage(getResourcePage('archer2')!)
+  assert.equal(collection.match(/class="resource-row"/g)?.length, 3)
+  assert.match(collection, /Recordings: GPU programming using OpenMP[\s\S]*Slides \(PDF\): Slurm job scheduling[\s\S]*Exercises \(PDF\): Message-passing/)
+})
 
-  const summaries = renderResourceResults('summary', '2026-11-18')
-  assert.equal(summaries.status, '1 entry')
-  assert.match(summaries.html, /Session outline: Week 01[\s\S]*Slides \(Markdown\): Week 01/)
-  assert.match(summaries.html, /href="#weeks\/asc01"[^>]*>Follow in Weeks/)
-  assert.match(renderResourceResults('recording', '2026-11-18').html, /No matching resources/)
+test('workshop detail actions preserve exercise links and do not publish member replay URLs', async () => {
+  const { getResourcePage } = await import('../src/platform/resource-catalog.ts')
+  const { renderResourcePage, renderResourceResults } = await import('../src/platform/resources.ts')
+  const week = renderResourcePage(getResourcePage('asc01')!)
+  assert.match(week, /href="https:\/\/github\.com\/hkust-asc\/ws26-01-linux-git#quest-1-connect-and-explore"[^>]*>Workshop exercises/)
+  assert.match(week, /href="#weeks\/asc01"[^>]*>Follow in Weeks/)
+
+  const curriculum = renderResourcePage(getResourcePage('asc27-first-principles')!)
+  assert.match(curriculum, /Related MPI exercises \(PDF\)/)
+  for (const page of [week, curriculum]) {
+    assert.match(page, /disabled aria-label="Recording \(Zoom\), members only"/)
+    assert.doesNotMatch(page, /zoom\.us/)
+  }
+  const filtered = renderResourceResults('recording', 'zoom 2026-11-25')
+  assert.equal(filtered.status, '1 entry')
+  assert.match(filtered.html, /href="#resources\/asc27-first-principles"[^>]*>ASC01: ASC27 First-Principles Curriculum/)
 })
 
 test('unlock-all-missions preference persists across reloads and practice groups cover every mission', async () => {

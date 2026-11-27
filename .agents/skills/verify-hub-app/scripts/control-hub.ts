@@ -705,6 +705,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
       await cdp.waitFor(`document.querySelector('#platform-view [data-route="#resources/asc01"]')`)
       await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources/asc01"]').click()`)
       await cdp.waitFor(`location.hash === '#resources/asc01' && document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
+      await cdp.waitFor(`document.querySelector('#platform-view button[aria-label^="Recording (Zoom)"]')?.disabled`)
       await cdp.evalJson(`document.querySelector('#platform-view [data-route="#weeks/asc01"]').click()`)
       await cdp.waitFor(`location.hash === '#weeks/asc01'`)
 
@@ -717,11 +718,17 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
         document.querySelector('[data-resource-format="recording"]').click()
       `)
       await cdp.waitFor(`document.getElementById('resource-count').textContent === '1 entry'
-        && document.querySelector('#resource-results a[aria-label^="Recording: Slurm"]')
-        && document.querySelector('#resource-results a[aria-label^="Slides (PDF): Slurm"]')`)
+        && document.querySelector('#resource-results [data-route="#resources/archer2"]')
+        && !document.querySelector('#resource-results .resource-links')`)
+      await cdp.evalJson(`document.querySelector('#resource-results [data-route="#resources/archer2"]').click()`)
+      await cdp.waitFor(`location.hash === '#resources/archer2'
+        && document.querySelectorAll('#platform-view .resource-row').length === 3
+        && document.querySelector('#platform-view a[aria-label^="Slides (PDF): Slurm"]')`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources"]').click()`)
+      await cdp.waitFor(`document.getElementById('resource-reset') !== null`)
       await cdp.evalJson(`document.getElementById('resource-reset').click()`)
       await cdp.waitFor(`document.querySelector('#resource-results a[aria-label^="HPC4 user guide"]')`)
-      checks.resources = { fromWeek: '#resources/asc01', backToWeek: '#weeks/asc01', dateAndTopicSearch: true, relatedSlidesKept: true }
+      checks.resources = { fromWeek: '#resources/asc01', backToWeek: '#weeks/asc01', dateAndTopicSearch: true, archer2Courses: 3 }
     }
 
     if (journey === 'all' || journey === 'search') {
@@ -878,7 +885,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
 
     if (journey === 'all' || journey === 'layout') {
       const widths = [320, 390, 768, 1152, 1440] as const
-      const routes = ['#atlas', '#a30', '#lesson/host-to-gpu', '#practice/1', '#resources', '#resources/asc01'] as const
+      const routes = ['#atlas', '#a30', '#lesson/host-to-gpu', '#practice/1', '#resources', '#resources/asc01', '#resources/archer2'] as const
       const layoutMatrix: Array<{ route: string; width: number; scrollWidth: number; innerWidth: number; overflowPx: number }> = []
 
       for (const route of routes) {
@@ -889,8 +896,8 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
           await cdp.waitFor(`document.querySelector('.terminal-form') !== null`)
         } else if (route === '#resources') {
           await cdp.waitFor(`document.getElementById('resource-search') !== null`)
-        } else if (route === '#resources/asc01') {
-          await cdp.waitFor(`document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
+        } else if (route.startsWith('#resources/')) {
+          await cdp.waitFor(`document.querySelector('#platform-view .resource-row')`)
         } else {
           await cdp.waitFor(`document.getElementById('page-title')?.textContent?.length > 0`)
         }

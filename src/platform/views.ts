@@ -12,7 +12,7 @@ import type { WorkshopWeek } from './curriculum.ts'
 import { conceptNeighbors, conceptsForLesson, escapeHtml as esc, lessonLinks, link } from './links.ts'
 import { browserStorage } from './progress.ts'
 import type { LearningProgress } from './progress.ts'
-import { getWorkshopResource } from './resource-catalog.ts'
+import { getResourcePage } from './resource-catalog.ts'
 import { renderWorkshopMaterialsLink, showResources } from './resources.ts'
 
 type Page = Extract<ParsedRoute, { view: 'learn' | 'practice' | 'weeks' | 'concept' | 'resources' }>
@@ -294,7 +294,7 @@ export function renderWeekView(
 
 export function showPage(host: HTMLElement, route: Page, progress: LearningProgress) {
   if (route.view === 'resources') {
-    showResources(host, route.workshop ? getWorkshopResource(route.workshop)! : undefined)
+    showResources(host, route.detail ? getResourcePage(route.detail)! : undefined)
     return
   }
   const d = desk()
