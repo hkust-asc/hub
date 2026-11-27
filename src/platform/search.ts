@@ -6,6 +6,7 @@ import { escapeHtml as esc } from './links.ts'
 interface Destination { route: string; title: string; kind: string; words: string }
 const destinations: Destination[] = [
   ...['Learn', 'Practice', 'Weeks', 'Atlas'].map(title => ({ route: `#${title.toLowerCase()}`, title, kind: 'Mode', words: '' })),
+  { route: '#resources', title: 'Resources', kind: 'Directory', words: '' },
   ...entries.flatMap(e => {
     const route = routeForEntry(e)
     return route ? [{ route, title: e.title, kind: e.kind === 'scenario' ? 'Learn' : e.kind === 'scene' ? 'Scene' : 'Concept',

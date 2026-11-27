@@ -33,6 +33,7 @@ import { browserStorage, LearningProgress, resolveSavedStep, stepBookmarkPositio
 import { lessonContinuation, lessonLinks } from './platform/links'
 import { progressStore } from './practice/engine/storage'
 import { weeks } from './platform/curriculum'
+import { getWorkshopResource, resourcesRoute } from './platform/resource-catalog'
 import { initThemeToggle } from './theme'
 
 const iconSet = { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Box, CalendarCheck, Check, ChevronRight, Cpu, Eye, GitCompareArrows, HardDrive, Info, LayoutGrid, Layers2, ListFilter, Maximize2, MemoryStick, Menu, Microchip, Moon, Network, Package, Pause, Play, RotateCcw, Route, Search, SkipBack, SkipForward, Sun, Terminal, X }
@@ -107,6 +108,7 @@ function canonicalHash(): string {
   if (currentRoute.view === 'learn') return '#learn'
   if (currentRoute.view === 'practice') return currentRoute.mission ? `#practice/${currentRoute.mission}` : '#practice'
   if (currentRoute.view === 'weeks') return currentRoute.week ? `#weeks/${currentRoute.week}` : '#weeks'
+  if (currentRoute.view === 'resources') return resourcesRoute(currentRoute.workshop)
   if (currentRoute.view === 'concept') return `#atlas/concept/${currentRoute.id}`
   if (currentRoute.view === 'atlas') return atlasMode === 'domains' ? '#atlas/domains' : '#atlas'
   if (currentRoute.view === 'hub') return `#atlas/${currentRoute.category}`
@@ -408,10 +410,11 @@ function render(): void {
   lessonView.hidden = currentRoute.view !== 'lesson'
   extras.hidden = lessonView.hidden
   const page = currentRoute
-  platform.hidden = !['learn', 'practice', 'weeks', 'concept'].includes(page.view)
+  const isPlatformPage = page.view === 'learn' || page.view === 'practice' || page.view === 'weeks' || page.view === 'concept' || page.view === 'resources'
+  platform.hidden = !isPlatformPage
   if (platform.hidden) platform.replaceChildren()
   const mode = page.view === 'lesson' || page.view === 'learn' ? 'learn'
-    : page.view === 'practice' || page.view === 'weeks' ? page.view : 'atlas'
+    : page.view === 'practice' || page.view === 'weeks' || page.view === 'resources' ? page.view : 'atlas'
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach(a => {
     if (a.dataset.mode === mode) a.setAttribute('aria-current', 'location')
     else a.removeAttribute('aria-current')
@@ -426,17 +429,19 @@ function render(): void {
   let breadcrumb = 'Atlas'
   let sceneRef = ''
 
-  if (page.view === 'learn' || page.view === 'practice' || page.view === 'weeks' || page.view === 'concept') {
+  if (isPlatformPage) {
     title = page.view === 'learn' ? 'Guided walkthroughs'
       : page.view === 'practice' ? (page.mission ? `Practice · Mission ${page.mission}` : 'Practice missions')
-      : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops') : getEntry(page.id)!.title
+      : page.view === 'weeks' ? (weeks.find(w => w.id === page.week)?.title ?? 'Weekly workshops')
+      : page.view === 'resources' ? (page.workshop ? `${getWorkshopResource(page.workshop)!.title} materials` : 'Resources')
+      : getEntry(page.id)!.title
     breadcrumb = page.view === 'concept' ? `Atlas / ${getCategory(getEntry(page.id)!.category).shortName}` : mode[0].toUpperCase() + mode.slice(1)
     platform.textContent = 'Loading…'
     void loadViews().then(({ showPage }) => {
       if (currentRoute === page) showPage(platform, page, learning)
     }).catch(error => {
-      console.error('Could not open learning mode', error)
-      if (currentRoute === page) platform.textContent = 'This learning view could not be loaded. Reload to try again.'
+      console.error('Could not open Hub page', error)
+      if (currentRoute === page) platform.textContent = 'This page could not be loaded. Reload to try again.'
     })
   } else if (currentRoute.view === 'atlas') {
     title = atlasMode === 'domains' ? 'Explore by domain' : 'Concept & scenario atlas'

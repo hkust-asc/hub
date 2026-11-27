@@ -211,6 +211,7 @@ test('concept sheets expose domain-scoped Prev/Next strips and Week views advanc
   const progress = new LearningProgress()
   const game = new Game()
   const freshWeek = renderWeekView('asc01', progress, game)
+  assert.match(freshWeek, /href="#resources\/asc01"[^>]*>Workshop materials/)
   assert.match(freshWeek, /week-step-pill is-current" data-week-stage="01"/)
   assert.match(freshWeek, /data-week-lesson="linux-fs" data-status="next"/)
   assert.match(freshWeek, /Start 01 \/ Learn: Linux tree →/)

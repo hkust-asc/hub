@@ -2,6 +2,7 @@ import type { Tone } from './glyphs'
 import type { ClusterTopicId, SceneId, TopicId } from './model'
 import { missionLessons, weeks } from './platform/curriculum.ts'
 import { codex } from './platform/codex.ts'
+import { getWorkshopResource, resourcesRoute } from './platform/resource-catalog.ts'
 
 export type CategoryId = 'nodes' | 'interconnect' | 'software' | 'linux' | 'gpu-scaling'
 export type LessonId = 'host-to-gpu' | 'ssh-tmux' | 'streams' | 'linux-fs' | 'first-job' | 'module-load'
@@ -56,6 +57,7 @@ export type ParsedRoute =
   | { view: 'learn' }
   | { view: 'practice'; mission?: number }
   | { view: 'weeks'; week?: string }
+  | { view: 'resources'; workshop?: string }
   | { view: 'concept'; id: string }
   | { view: 'atlas'; mode: 'all' | 'domains' }
   | { view: 'hub'; category: CategoryId }
@@ -748,6 +750,8 @@ export function parseRoute(hash: string): ParsedRoute {
   if (head === 'practice') return Object.hasOwn(missionLessons, tail)
     ? { view: 'practice', mission: Number(tail) } : { view: 'practice' }
   if (head === 'weeks') return weeks.some(item => item.id === tail) ? { view: 'weeks', week: tail } : { view: 'weeks' }
+  if (head === 'resources') return tail && id === undefined && getWorkshopResource(tail)
+    ? { view: 'resources', workshop: tail } : { view: 'resources' }
   if (head === 'atlas') {
     if (tail === 'concept' && getEntry(id)?.kind === 'subject') return { view: 'concept', id }
     if (tail === 'domains') return { view: 'atlas', mode: 'domains' }
@@ -818,6 +822,11 @@ export function trailSnapshotForCurrent(
   if (route.view === 'weeks') return route.week
     ? { route: `#weeks/${route.week}`, label: weeks.find(w => w.id === route.week)!.title, glyph: 'first-job', tone: 'amber' }
     : { route: '#weeks', label: 'Weeks', glyph: 'first-job', tone: 'amber' }
+  if (route.view === 'resources') return {
+    route: resourcesRoute(route.workshop),
+    label: route.workshop ? `${getWorkshopResource(route.workshop)!.title} materials` : 'Resources',
+    glyph: 'linux-fs', tone: 'slate',
+  }
   if (route.view === 'atlas') {
     return route.mode === 'domains'
       ? { route: '#atlas/domains', label: 'Domains', glyph: 'cluster', tone: 'slate' }
@@ -841,6 +850,7 @@ export function fallbackBackTarget(
   if (route.view === 'learn') return null
   if (route.view === 'practice') return route.mission ? { route: '#practice', label: 'Practice', glyph: 'linux-fs', tone: 'green' } : null
   if (route.view === 'weeks') return route.week ? { route: '#weeks', label: 'Weeks', glyph: 'first-job', tone: 'amber' } : null
+  if (route.view === 'resources') return route.workshop ? { route: resourcesRoute(), label: 'Resources', glyph: 'linux-fs', tone: 'slate' } : null
   if (route.view === 'atlas') return null
   if (route.view === 'hub') {
     return { route: '#atlas', label: 'Concept Atlas', glyph: 'cluster', tone: 'slate' }

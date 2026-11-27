@@ -9,6 +9,8 @@
 .mode-tab:hover { background: var(--tone-bg); color: var(--tone-ink); }
 .mode-tab:hover .mode-dot, .mode-tab[aria-current] .mode-dot, .drawer-modes a[aria-current] .mode-dot { opacity: 1; }
 .mode-tab[aria-current] { background: var(--tone-bg); color: var(--tone-ink); border-bottom-color: var(--tone-strong); font-weight: 500; }
+.mode-tab[data-mode='resources'] { margin-inline-start: 6px; border-inline-start: 1px solid var(--line); }
+.mode-tab[data-mode='resources'] svg { width: 14px; height: 14px; flex-shrink: 0; }
 .drawer-modes { display: none; }
 .drawer-modes a[aria-current] { background: var(--tone-bg); color: var(--tone-ink); }
 .drawer-modes a[aria-current]::before { background: var(--tone-strong); }
@@ -60,6 +62,24 @@
 .mode-card h2 .mode-link, .mode-card h3 .mode-link { font: inherit; background: transparent; border: 0; padding: 2px 0; color: var(--ink); }
 .mode-card:hover h2 .mode-link, .mode-card:hover h3 .mode-link { color: var(--tone-ink); text-decoration: underline; }
 .inspector-reference { margin-top: 14px; }
+
+/* Resources */
+.resource-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.resource-toolbar .segmented-pills { flex-wrap: wrap; }
+.resource-toolbar button { min-height: 36px; }
+.resource-search { flex: 1 1 280px; min-width: 0; max-width: 430px; height: 40px; }
+.resource-search span { color: var(--ink); font-size: 12px; white-space: nowrap; }
+.resource-search input { width: 100%; min-width: 0; font-size: 16px; }
+.resource-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); background: #fff; }
+.resource-list > li + li { border-top: 1px solid var(--line); }
+.resource-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; padding: 12px 14px; overflow-wrap: anywhere; }
+.resource-info { flex: 1 1 260px; min-width: 0; }
+.resource-info h3 { font-size: 16px; font-weight: 500; line-height: 1.4; }
+.resource-title { text-decoration: underline; text-decoration-color: var(--tone-border); text-underline-offset: .15em; }
+.resource-title:hover { color: var(--tone-ink); text-decoration-color: currentColor; }
+.resource-use { margin-top: 3px; font-size: 13px; line-height: 1.55; color: #485563; }
+.resource-links { margin: 0; max-width: 100%; }
+.resource-links .mode-link { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; }
 
 /* Practice groups & unlock toggle */
 .practice-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 10px 14px; margin-bottom: 18px; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--tone-strong); }
@@ -131,6 +151,7 @@
   gap: 8px 14px;
   margin-bottom: 12px;
 }
+.week-navigation-links { display: flex; flex-wrap: wrap; gap: 7px; }
 .week-recommended {
   display: flex;
   align-items: center;

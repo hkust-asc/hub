@@ -651,7 +651,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
 
     if (journey === 'all' || journey === 'modes') {
       const modeLog: Array<{ mode: string; hash: string; heading: string; ariaCurrent: boolean }> = []
-      for (const mode of ['learn', 'practice', 'weeks', 'atlas'] as const) {
+      for (const mode of ['learn', 'practice', 'weeks', 'resources', 'atlas'] as const) {
         await cdp.evalJson(`document.querySelector('.top-modes [data-mode="${mode}"]').click()`)
         await cdp.waitFor(`location.hash === '#${mode}' && document.querySelector('.top-modes [data-mode="${mode}"]')?.getAttribute('aria-current') === 'location'`)
         if (mode !== 'atlas') {
@@ -698,6 +698,30 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
       await cdp.waitFor(`location.hash === '#cluster'`)
 
       checks.modesAndExplore = { modeLog, a30Changed, a30Reset, returnedTo: '#cluster' }
+
+      await cdp.evalJson(`document.querySelector('.top-modes [data-mode="weeks"]').click()`)
+      await cdp.waitFor(`document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#weeks/asc01"]').click()`)
+      await cdp.waitFor(`document.querySelector('#platform-view [data-route="#resources/asc01"]')`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources/asc01"]').click()`)
+      await cdp.waitFor(`location.hash === '#resources/asc01' && document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#weeks/asc01"]').click()`)
+      await cdp.waitFor(`location.hash === '#weeks/asc01'`)
+
+      await cdp.evalJson(`document.querySelector('.top-modes [data-mode="resources"]').click()`)
+      await cdp.waitFor(`document.getElementById('resource-search') !== null`)
+      await cdp.evalJson(`
+        const search = document.getElementById('resource-search')
+        search.value = '26 July 2023 sbatch'
+        search.dispatchEvent(new Event('input', { bubbles: true }))
+        document.querySelector('[data-resource-format="recording"]').click()
+      `)
+      await cdp.waitFor(`document.getElementById('resource-count').textContent === '1 entry'
+        && document.querySelector('#resource-results a[aria-label^="Recording: Slurm"]')
+        && document.querySelector('#resource-results a[aria-label^="Slides (PDF): Slurm"]')`)
+      await cdp.evalJson(`document.getElementById('resource-reset').click()`)
+      await cdp.waitFor(`document.querySelector('#resource-results a[aria-label^="HPC4 user guide"]')`)
+      checks.resources = { fromWeek: '#resources/asc01', backToWeek: '#weeks/asc01', dateAndTopicSearch: true, relatedSlidesKept: true }
     }
 
     if (journey === 'all' || journey === 'search') {
@@ -854,7 +878,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
 
     if (journey === 'all' || journey === 'layout') {
       const widths = [320, 390, 768, 1152, 1440] as const
-      const routes = ['#atlas', '#a30', '#lesson/host-to-gpu', '#practice/1'] as const
+      const routes = ['#atlas', '#a30', '#lesson/host-to-gpu', '#practice/1', '#resources', '#resources/asc01'] as const
       const layoutMatrix: Array<{ route: string; width: number; scrollWidth: number; innerWidth: number; overflowPx: number }> = []
 
       for (const route of routes) {
@@ -863,6 +887,10 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
           await cdp.waitFor(`document.querySelector('.stage-workbench') !== null`)
         } else if (route.startsWith('#practice/')) {
           await cdp.waitFor(`document.querySelector('.terminal-form') !== null`)
+        } else if (route === '#resources') {
+          await cdp.waitFor(`document.getElementById('resource-search') !== null`)
+        } else if (route === '#resources/asc01') {
+          await cdp.waitFor(`document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
         } else {
           await cdp.waitFor(`document.getElementById('page-title')?.textContent?.length > 0`)
         }
@@ -888,6 +916,9 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
           }
           if (route === '#lesson/host-to-gpu' && (width === 390 || width === 1440)) {
             await cdp.screenshot(recordArtifact(`05-layout-stage-${width}w.png`))
+          }
+          if (route === '#resources' && (width === 390 || width === 1440)) {
+            await cdp.screenshot(recordArtifact(`06-resources-archive-${width}w.png`))
           }
         }
       }

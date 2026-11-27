@@ -29,6 +29,8 @@ import { moduleSteps } from '../src/module-load/story.ts'
 import { codex, conceptForAward } from '../src/platform/codex.ts'
 import { missionLessons, practiceGroups, weeks } from '../src/platform/curriculum.ts'
 import { conceptsForLesson, entryLink, lessonLinks } from '../src/platform/links.ts'
+import { getWorkshopResource, resourcesRoute, workshopResources } from '../src/platform/resource-catalog.ts'
+import { renderResourceResults, renderWorkshopMaterialsLink, renderWorkshopResources } from '../src/platform/resources.ts'
 import { searchDestinations } from '../src/platform/search.ts'
 import { levels } from '../src/practice/engine/levels/index.ts'
 import { sshSteps } from '../src/ssh-tmux/story.ts'
@@ -53,13 +55,15 @@ export const STATE_MACHINES: readonly StateMachineSpec[] = [
     id: 'route-and-link-graph',
     name: 'Route & Link Graph',
     summary:
-      'Hash router, canonical URL normalizer, cross-mode link graph (Learn, Practice, Weeks, Atlas, Explore scenes, Concept sheets), async scenario mount token, and bounded Think Back trail.',
+      'Hash router, canonical URL normalizer, Hub link graph (Learn, Practice, Weeks, Atlas, Resources, Explore scenes, Concept sheets), async scenario mount token, and bounded Think Back trail.',
     ownerFiles: [
       'src/catalog.ts',
       'src/main.ts',
       'src/platform/links.ts',
       'src/platform/codex.ts',
       'src/platform/curriculum.ts',
+      'src/platform/resource-catalog.ts',
+      'src/platform/resources.ts',
       'src/platform/search.ts',
       'src/platform/views.ts',
     ],
@@ -67,6 +71,7 @@ export const STATE_MACHINES: readonly StateMachineSpec[] = [
       'learn (#learn)',
       'practice-index (#practice) & practice-mission (#practice/1..6)',
       'weeks-index (#weeks) & week-detail (#weeks/asc01)',
+      'resource-directory (#resources) & workshop materials (#resources/<id>)',
       'atlas-all (#atlas) & atlas-domains (#atlas/domains)',
       'domain-hub (#atlas/<category>)',
       'concept-sheet (#atlas/concept/<id>)',
@@ -86,7 +91,7 @@ export const STATE_MACHINES: readonly StateMachineSpec[] = [
       'Every active scene, subject, scenario, scenario step, mission, week, and domain hub is reachable from top-level modes (zero orphans).',
       'pushTrail, pruneTrailForDestination, popTrail, and fallbackBackTarget never produce self-loops and terminate at a root hub/index in bounded steps.',
       'lessonLoadToken cancels superseded async scenario imports so stale or duplicate mounts never overwrite the active view.',
-      'Bidirectional cross-links hold across lesson <-> concept, mission <-> concept, lesson <-> mission, and week <-> {lesson, mission, concept}.',
+      'Bidirectional cross-links hold across lesson <-> concept, mission <-> concept, lesson <-> mission, and week <-> {lesson, mission, concept, workshop materials}.',
     ],
     verification: {
       formalModels: ['formal/Navigation/Navigation.tla'],
@@ -244,6 +249,8 @@ export const LESSON_STEP_COUNTS: Readonly<Record<LessonId, number>> = {
 
 export type RouteNodeKind =
   | 'mode-index'
+  | 'directory'
+  | 'workshop-resources'
   | 'domain-hub'
   | 'concept'
   | 'scene'
@@ -285,8 +292,8 @@ export interface VerificationReport {
   readonly errors: readonly string[]
 }
 
-const TOP_LEVEL_ROOTS = ['#learn', '#practice', '#weeks', '#atlas'] as const
-const TERMINAL_BACK_ROOTS = new Set(['#learn', '#practice', '#weeks', '#atlas', '#atlas/domains'])
+const TOP_LEVEL_ROOTS = ['#learn', '#practice', '#weeks', '#atlas', '#resources'] as const
+const TERMINAL_BACK_ROOTS = new Set([...TOP_LEVEL_ROOTS, '#atlas/domains'])
 
 export function stateForRoute(parsed: ParsedRoute): AppState {
   if (parsed.view === 'workbench') {
@@ -309,6 +316,8 @@ export function canonicalizeParsedRoute(parsed: ParsedRoute, sceneState: AppStat
       return parsed.mission ? `#practice/${parsed.mission}` : '#practice'
     case 'weeks':
       return parsed.week ? `#weeks/${parsed.week}` : '#weeks'
+    case 'resources':
+      return resourcesRoute(parsed.workshop)
     case 'concept':
       return `#atlas/concept/${parsed.id}`
     case 'atlas':
@@ -351,6 +360,13 @@ function isStrictValidHash(rawHash: string): { valid: boolean; reason?: string; 
 
   if (head === 'learn' && segments.length === 1) {
     return { valid: true, canonical: '#learn' }
+  }
+  if (head === 'resources') {
+    if (segments.length === 1) return { valid: true, canonical: resourcesRoute() }
+    if (segments.length === 2 && tail && getWorkshopResource(tail)) {
+      return { valid: true, canonical: resourcesRoute(tail) }
+    }
+    return { valid: false, reason: `Unknown workshop materials route '${rawHash}'` }
   }
   if (head === 'practice') {
     if (segments.length === 1) return { valid: true, canonical: '#practice' }
@@ -425,12 +441,16 @@ export function buildLinkGraph(): LinkGraph {
     nodes.push({ route, kind, label, parsed: parseRoute(route) })
   }
 
-  // 1. Top-level mode indices
+  // 1. Top-level destinations
   addNode('#learn', 'mode-index', 'Guided walkthroughs')
   addNode('#practice', 'mode-index', 'Practice missions')
   addNode('#weeks', 'mode-index', 'Weekly workshops')
   addNode('#atlas', 'mode-index', 'Concept & scenario atlas (All)')
   addNode('#atlas/domains', 'mode-index', 'Explore by domain')
+  addNode(resourcesRoute(), 'directory', 'Resources')
+  for (const workshop of workshopResources) {
+    addNode(resourcesRoute(workshop.id), 'workshop-resources', workshop.title)
+  }
 
   // 2. Domain hubs
   for (const cat of categories) {
@@ -558,6 +578,9 @@ export function buildLinkGraph(): LinkGraph {
   for (const week of weeks) {
     const weekRoute = `#weeks/${week.id}`
     addEdge('#weeks', weekRoute, `src/platform/views.ts:week-card(${week.id})`, 'content')
+    for (const href of extractHtmlRoutes(renderWorkshopMaterialsLink(week.id))) {
+      addEdge(weekRoute, href, 'src/platform/resources.ts:renderWorkshopMaterialsLink', 'content')
+    }
     for (const lessonId of week.lessons) {
       for (const href of extractHtmlRoutes(entryLink(lessonId))) {
         addEdge(weekRoute, href, `src/platform/views.ts:week.lessons(${lessonId})`, 'content')
@@ -570,6 +593,16 @@ export function buildLinkGraph(): LinkGraph {
       for (const href of extractHtmlRoutes(entryLink(conceptId))) {
         addEdge(weekRoute, href, `src/platform/views.ts:week.concepts(${conceptId})`, 'content')
       }
+    }
+  }
+
+  // Resources directory and workshop materials
+  for (const href of extractHtmlRoutes(renderResourceResults('all').html)) {
+    addEdge(resourcesRoute(), href, 'src/platform/resources.ts:renderResourceResults', 'content')
+  }
+  for (const workshop of workshopResources) {
+    for (const href of extractHtmlRoutes(renderWorkshopResources(workshop))) {
+      addEdge(resourcesRoute(workshop.id), href, 'src/platform/resources.ts:renderWorkshopResources', 'content')
     }
   }
 
@@ -1055,6 +1088,17 @@ export function verifyStateMachines(graph: LinkGraph = buildLinkGraph()): Verifi
     }
   }
 
+  for (const workshop of workshopResources) {
+    if (!workshop.weekId) continue
+    const weekRoute = `#weeks/${workshop.weekId}`
+    const workshopRoute = resourcesRoute(workshop.id)
+    const toMaterials = graph.edges.some(edge => edge.from === weekRoute && edge.to === workshopRoute)
+    const toWeek = graph.edges.some(edge => edge.from === workshopRoute && edge.to === weekRoute)
+    if (!toMaterials || !toWeek) {
+      errors.push(`Broken bidirectional week <-> workshop materials link between '${weekRoute}' and '${workshopRoute}'`)
+    }
+  }
+
   // Verify every CategoryId has at least one active entry
   for (const cat of categories) {
     const activeInCat = entriesForCategory(cat.id as CategoryId).filter(e => e.kind !== 'planned')
@@ -1098,12 +1142,20 @@ export function renderMermaidStatecharts(graph: LinkGraph = buildLinkGraph()): s
     `  state "Simulated Missions (#practice/1..6 · ${counts.get('mission') ?? 0})" as Missions`,
     '  state "Weeks Index (#weeks)" as Weeks',
     `  state "Workshop Briefs (#weeks/asc01 · ${counts.get('week') ?? 0})" as WeekDetail`,
+    '  state "Resources (#resources)" as Resources',
+    `  state "Workshop Materials (#resources/<id> · ${counts.get('workshop-resources') ?? 0})" as WorkshopMaterials`,
     '',
     '  [*] --> Atlas',
     '  Atlas --> Hubs: domain shelf / group header',
     '  Atlas --> Concepts: subject tile',
     '  Atlas --> Workbench: scene tile (#cluster, #a30)',
     '  Atlas --> Stage: scenario tile',
+    '  Atlas --> Resources: Hub navigation',
+    '  Resources --> Atlas: Hub navigation',
+    '  Resources --> WorkshopMaterials: open workshop',
+    '  WorkshopMaterials --> Resources: Back to directory',
+    '  WeekDetail --> WorkshopMaterials: Workshop materials',
+    '  WorkshopMaterials --> WeekDetail: Follow in Weeks',
     '  Hubs --> Concepts: domain subject tile',
     '  Hubs --> Workbench: domain scene tile',
     '  Hubs --> Stage: domain scenario tile',

@@ -79,6 +79,44 @@ test('search distinguishes the stdout walkthrough, the simulation and the refere
   assert.ok(!searchDestinations('').some(item => item.route.includes('planned')))
 })
 
+test('Resources is discoverable in the switcher and can be revisited through Think Back', async () => {
+  const { searchDestinations } = await import('../src/platform/search.ts')
+  assert.ok(searchDestinations('resources').some(item => item.route === '#resources'))
+  const route = parseRoute('#resources')
+  assert.equal(trailSnapshotForCurrent(route, '#resources', initialState).route, '#resources')
+  assert.equal(fallbackBackTarget(route, initialState), null)
+  const materials = parseRoute('#resources/asc01')
+  assert.deepEqual(materials, { view: 'resources', workshop: 'asc01' })
+  assert.equal(trailSnapshotForCurrent(materials, '#resources/asc01', initialState).route, '#resources/asc01')
+  assert.equal(fallbackBackTarget(materials, initialState)?.route, '#resources')
+  assert.deepEqual(parseRoute('#resources/asc01/unknown'), route)
+})
+
+test('workshops follow the starter guide newest first and search matches dates and topics', async () => {
+  const { renderResourceResults } = await import('../src/platform/resources.ts')
+  const all = renderResourceResults('all')
+  assert.match(all.html, /HPC4 user guide[\s\S]*datetime="2026-11-18"[\s\S]*datetime="2026-10-06"[\s\S]*datetime="2023-07-26"[\s\S]*datetime="2022-03-23"/)
+  const search = renderResourceResults('all', '  OPENACC 6 October 2026  ')
+  assert.equal(search.status, '1 entry')
+  assert.match(search.html, /GPU programming using OpenMP/)
+  assert.doesNotMatch(search.html, /Week 01|Start here/)
+})
+
+test('resource search and format filters intersect without splitting a workshop’s links', async () => {
+  const { renderResourceResults } = await import('../src/platform/resources.ts')
+  const recordings = renderResourceResults('recording', 'sbatch 2023-07-26')
+  assert.equal(recordings.status, '1 entry')
+  assert.match(recordings.html, /Recording: Slurm job scheduling/)
+  assert.match(recordings.html, /Session overview: Slurm job scheduling/)
+  assert.match(recordings.html, /Slides \(PDF\): Slurm job scheduling/)
+
+  const summaries = renderResourceResults('summary', '2026-11-18')
+  assert.equal(summaries.status, '1 entry')
+  assert.match(summaries.html, /Session outline: Week 01[\s\S]*Slides \(Markdown\): Week 01/)
+  assert.match(summaries.html, /href="#weeks\/asc01"[^>]*>Follow in Weeks/)
+  assert.match(renderResourceResults('recording', '2026-11-18').html, /No matching resources/)
+})
+
 test('unlock-all-missions preference persists across reloads and practice groups cover every mission', async () => {
   const { LearningProgress } = await import('../src/platform/progress.ts')
   const { practiceGroups } = await import('../src/platform/curriculum.ts')

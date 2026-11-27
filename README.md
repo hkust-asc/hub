@@ -38,6 +38,10 @@ This runs all `tests/*.test.ts` suites (including sandbox replays) and the produ
 
 Use **Ctrl/Cmd+K** to jump across modes (arrows, Enter, Escape). On smaller screens the modes are in the navigation drawer. Legacy `#scenario/first-job` and `?lesson=...` links still resolve.
 
+**Resources** (`#resources`) is the public directory for workshop materials, HPC4 setup, and shared references. Search by title, date, or topic, or filter for recordings, summaries, and slides. Workshops are listed newest first and keep all their materials in one row. **Workshop materials** in a weekly brief opens its specific entry (e.g. `#resources/asc01`); **Follow in Weeks** returns to the guided activities.
+
+**For resource curators:** Update [the resource catalog](src/platform/resource-catalog.ts). Give each workshop a stable `id`, its start date if known (`YYYY-MM-DD`), a publisher, a sentence on when it is useful, and links to the original materials. Use the existing `weekId` only for a matching Weekly brief. Verify links while signed out and confirm permission to share. Label eligible Zoom replays **Recording (Zoom)**; do not add meeting invites, passcodes, chat exports, or member-only files to the public site.
+
 Learn bookmarks/completion, field checkboxes, practice completions and simulated command history stay in this browser. Do not enter real credentials. Visiting a lesson or card and returning to the same mission keeps its live terminal; restarting a mission, selecting another mission or reloading the page starts a fresh simulated filesystem. **Reset practice progress** clears the practice records, not the weekly checklist or lesson bookmarks.
 
 **For lesson authors:** register a scenario in the catalog and lesson loader as before; Learn and search pick it up automatically. Add optional pairings in `src/platform/links.ts` or `src/platform/curriculum.ts`. Neither lesson rendering nor the build requires a checkout of the workshop repos. The port is based on Linux X-Ray at `6effdce`; Week 01 is based on the workshop brief at `e6a434e`.
