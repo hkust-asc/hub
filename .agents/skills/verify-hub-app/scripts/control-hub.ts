@@ -705,11 +705,18 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
       await cdp.waitFor(`document.querySelector('#platform-view [data-route="#resources/asc01"]')`)
       await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources/asc01"]').click()`)
       await cdp.waitFor(`location.hash === '#resources/asc01' && document.querySelector('#platform-view [data-route="#weeks/asc01"]')`)
-      await cdp.waitFor(`document.querySelector('#platform-view button[aria-label^="Recording (Zoom)"]')?.disabled`)
+      const zoomLink = '#platform-view a[aria-label^="Recording (Zoom):"][href^="https://hkust.zoom.us/rec/share/"][target="_blank"]'
+      await cdp.waitFor(`document.querySelector(${JSON.stringify(zoomLink)}) !== null`)
       await cdp.evalJson(`document.querySelector('#platform-view [data-route="#weeks/asc01"]').click()`)
       await cdp.waitFor(`location.hash === '#weeks/asc01'`)
 
       await cdp.evalJson(`document.querySelector('.top-modes [data-mode="resources"]').click()`)
+      await cdp.waitFor(`document.getElementById('resource-search') !== null`)
+      await cdp.waitFor(`document.querySelector('#resource-results a[aria-label^="Open resource:"]')?.textContent.trim() === '↗'
+        && !document.getElementById('resource-end')`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources/asc27-first-principles"]').click()`)
+      await cdp.waitFor(`location.hash === '#resources/asc27-first-principles' && document.querySelector(${JSON.stringify(zoomLink)}) !== null`)
+      await cdp.evalJson(`document.querySelector('#platform-view [data-route="#resources"]').click()`)
       await cdp.waitFor(`document.getElementById('resource-search') !== null`)
       await cdp.evalJson(`
         const search = document.getElementById('resource-search')
@@ -728,7 +735,7 @@ async function cmdDrive(runId: string, evidenceDir: string, journey: JourneyName
       await cdp.waitFor(`document.getElementById('resource-reset') !== null`)
       await cdp.evalJson(`document.getElementById('resource-reset').click()`)
       await cdp.waitFor(`document.querySelector('#resource-results a[aria-label^="HPC4 user guide"]')`)
-      checks.resources = { fromWeek: '#resources/asc01', backToWeek: '#weeks/asc01', dateAndTopicSearch: true, archer2Courses: 3 }
+      checks.resources = { fromWeek: '#resources/asc01', backToWeek: '#weeks/asc01', publicZoomLinks: 2, arrowOnlyReferences: true, dateAndTopicSearch: true, archer2Courses: 3 }
     }
 
     if (journey === 'all' || journey === 'search') {

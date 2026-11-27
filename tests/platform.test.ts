@@ -93,13 +93,13 @@ test('Resources is discoverable in the switcher and can be revisited through Thi
   assert.deepEqual(parseRoute('#resources/slurm-2023'), parseRoute('#resources/archer2'))
 })
 
-test('workshop and collection rows are title links and ordinary references use one visible action label', async () => {
+test('workshop and collection rows are title links and ordinary references use accessible arrow links', async () => {
   const { renderResourceResults } = await import('../src/platform/resources.ts')
   const all = renderResourceResults('all')
   assert.match(all.html, /HPC4 user guide[\s\S]*datetime="2026-11-25"[\s\S]*datetime="2026-11-18"[\s\S]*Shared references[\s\S]*href="#resources\/archer2"/)
   assert.doesNotMatch(all.html, /Workshop exercises|Follow in Weeks|Recording \(Zoom\)|Slides \(PDF\): Slurm/)
-  assert.match(all.html, /aria-label="Open resource: Linux shell crash course">Open resource/)
-  assert.match(all.html, /aria-label="Open resource: 2026 HPC tutorials">Open resource/)
+  assert.match(all.html, /aria-label="Open resource: Linux shell crash course"><span aria-hidden="true">↗<\/span><\/a>/)
+  assert.match(all.html, /aria-label="Open resource: 2026 HPC tutorials"><span aria-hidden="true">↗<\/span><\/a>/)
 
   const search = renderResourceResults('recording', '  OPENACC 6 October 2026  ')
   assert.equal(search.status, '1 entry')
@@ -115,7 +115,7 @@ test('ARCHER2 details retain all three courses and their material links', async 
   assert.match(collection, /Recordings: GPU programming using OpenMP[\s\S]*Slides \(PDF\): Slurm job scheduling[\s\S]*Exercises \(PDF\): Message-passing/)
 })
 
-test('workshop detail actions preserve exercise links and do not publish member replay URLs', async () => {
+test('both workshop details link to distinct Zoom recordings and keep their exercise links', async () => {
   const { getResourcePage } = await import('../src/platform/resource-catalog.ts')
   const { renderResourcePage, renderResourceResults } = await import('../src/platform/resources.ts')
   const week = renderResourcePage(getResourcePage('asc01')!)
@@ -124,10 +124,11 @@ test('workshop detail actions preserve exercise links and do not publish member 
 
   const curriculum = renderResourcePage(getResourcePage('asc27-first-principles')!)
   assert.match(curriculum, /Related MPI exercises \(PDF\)/)
-  for (const page of [week, curriculum]) {
-    assert.match(page, /disabled aria-label="Recording \(Zoom\), members only"/)
-    assert.doesNotMatch(page, /zoom\.us/)
-  }
+  const replay = /href="(https:\/\/hkust\.zoom\.us\/rec\/share\/[A-Za-z0-9._-]+)" target="_blank" rel="noopener noreferrer" aria-label="Recording \(Zoom\):/
+  const weekReplay = week.match(replay)
+  const curriculumReplay = curriculum.match(replay)
+  assert.ok(weekReplay && curriculumReplay)
+  assert.notEqual(weekReplay[1], curriculumReplay[1])
   const filtered = renderResourceResults('recording', 'zoom 2026-11-25')
   assert.equal(filtered.status, '1 entry')
   assert.match(filtered.html, /href="#resources\/asc27-first-principles"[^>]*>ASC01: ASC27 First-Principles Curriculum/)

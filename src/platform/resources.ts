@@ -1,7 +1,7 @@
 import type { Tone } from '../glyphs.ts'
 import { escapeHtml as esc, link } from './links.ts'
 import { resourceCollections, resourceReferences, resourceSetup, resourcesRoute, workshopResources } from './resource-catalog.ts'
-import type { ResourceEntry, ResourceInfo, ResourcePage, WorkshopResource } from './resource-catalog.ts'
+import type { ResourceEntry, ResourceInfo, ResourcePage } from './resource-catalog.ts'
 
 const formats = [
   ['all', 'All resources'],
@@ -20,10 +20,11 @@ const sections: readonly {
   title: string
   tone: Tone
   entries: readonly DirectoryEntry[]
+  arrowOnly?: boolean
 }[] = [
   { title: 'Start here', tone: 'green', entries: [resourceSetup] },
   { title: 'Workshops & recordings', tone: 'blue', entries: workshopResources.toSorted(newestFirst) },
-  { title: 'Shared references', tone: 'slate', entries: [...resourceCollections, ...resourceReferences] },
+  { title: 'Shared references', tone: 'slate', entries: [...resourceCollections, ...resourceReferences], arrowOnly: true },
 ]
 const dateFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 
@@ -42,18 +43,18 @@ function renderRow(entry: ResourceInfo, heading: string, actions = '') {
   </article></li>`
 }
 
-function materialLinks(entry: ResourceEntry) {
+function materialLinks(entry: ResourceEntry, arrowOnly = false) {
   return entry.links.map(item =>
-    `<a class="mode-link" href="${esc(item.href)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`${item.label}: ${entry.title}`)}">${esc(item.label)} <span aria-hidden="true">↗</span></a>`
+    `<a class="mode-link${arrowOnly ? ' resource-icon-link' : ''}" href="${esc(item.href)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(`${item.label}: ${entry.title}`)}">${arrowOnly ? '' : `${esc(item.label)} `}<span aria-hidden="true">↗</span></a>`
   ).join('')
 }
 
-function renderDirectoryRow(entry: DirectoryEntry) {
+function renderDirectoryRow(entry: DirectoryEntry, arrowOnly?: boolean) {
   if ('id' in entry) {
     const href = esc(resourcesRoute(entry.id))
     return renderRow(entry, `<a class="resource-title" data-route="${href}" href="${href}">${esc(entry.title)}</a>`)
   }
-  return renderRow(entry, esc(entry.title), materialLinks(entry))
+  return renderRow(entry, esc(entry.title), materialLinks(entry, arrowOnly))
 }
 
 function renderSection(title: string, tone: Tone, rows: readonly string[]) {
@@ -69,12 +70,11 @@ function searchText(entry: ResourceInfo) {
   ].join(' ')
 }
 
-function matchesEntry(entry: ResourceEntry | WorkshopResource, filter: ResourceFilter, words: readonly string[], group = '') {
-  const memberReplay = 'memberZoomReplay' in entry && entry.memberZoomReplay
-  if (filter !== 'all' && !(memberReplay && filter === 'recording') && !entry.links.some(item => item.format === filter)) return false
+function matchesEntry(entry: ResourceEntry, filter: ResourceFilter, words: readonly string[], group = '') {
+  if (filter !== 'all' && !entry.links.some(item => item.format === filter)) return false
   if (!words.length) return true
   const searchable = [
-    group, searchText(entry), memberReplay ? 'recording zoom' : '',
+    group, searchText(entry),
     ...entry.links.map(item => `${item.format} ${item.label}`),
   ].join(' ').toLowerCase()
   return words.every(word => searchable.includes(word))
@@ -83,12 +83,12 @@ function matchesEntry(entry: ResourceEntry | WorkshopResource, filter: ResourceF
 export function renderResourceResults(filter: ResourceFilter, query = '') {
   const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
   let count = 0
-  const html = sections.map(({ title, tone, entries }) => {
+  const html = sections.map(({ title, tone, entries, arrowOnly }) => {
     const matches = entries.filter(entry => 'courses' in entry
       ? entry.courses.some(course => matchesEntry(course, filter, words, searchText(entry)))
       : matchesEntry(entry, filter, words))
     count += matches.length
-    return matches.length ? renderSection(title, tone, matches.map(renderDirectoryRow)) : ''
+    return matches.length ? renderSection(title, tone, matches.map(entry => renderDirectoryRow(entry, arrowOnly))) : ''
   }).join('')
   return {
     html: html || '<p class="mode-intro">No matching resources. Try a different search or clear the filters.</p>',
@@ -107,11 +107,8 @@ export function renderResourcePage(page: ResourcePage) {
     const rows = page.courses.toSorted(newestFirst).map(course => renderRow(course, esc(course.title), materialLinks(course)))
     return `${back}${renderSection('Courses', 'slate', rows)}`
   }
-  const replay = page.memberZoomReplay
-    ? '<span class="resource-replay"><button class="mode-link" type="button" disabled aria-label="Recording (Zoom), members only">Recording (Zoom)</button><span class="mode-meta">Members only</span></span>'
-    : ''
   const follow = page.weekId ? link(`#weeks/${page.weekId}`, 'Follow in Weeks') : ''
-  return `${back}${renderSection('Workshop materials', 'blue', [renderRow(page, '', replay + materialLinks(page) + follow)])}`
+  return `${back}${renderSection('Workshop materials', 'blue', [renderRow(page, '', materialLinks(page) + follow)])}`
 }
 
 let archiveFilter: ResourceFilter = 'all'
@@ -123,7 +120,7 @@ export function showResources(host: HTMLElement, page?: ResourcePage) {
     return
   }
   const initial = renderResourceResults(archiveFilter, archiveQuery)
-  host.innerHTML = `<p class="mode-intro">Open a workshop or collection title for its materials. External links open in a new tab.</p>
+  host.innerHTML = `<p class="mode-intro">Open a workshop or collection title for its materials.</p>
     <div class="resource-toolbar">
       <label class="atlas-search-wrap resource-search"><span>Search resources</span>
         <input type="search" id="resource-search" placeholder="Title, date, or topic" autocomplete="off">
@@ -134,11 +131,7 @@ export function showResources(host: HTMLElement, page?: ResourcePage) {
       <button class="mode-link" type="button" id="resource-reset">Clear filters</button>
       <span class="mode-meta" role="status" id="resource-count">${initial.status}</span>
     </div>
-    <div id="resource-results">${initial.html}</div>
-    <section class="mode-panel step-panel" data-tone="amber" aria-labelledby="resource-end">
-      <h2 id="resource-end">End of the directory</h2>
-      <p>Only public links are listed. Team-only recordings and notes stay in member channels.</p>
-    </section>`
+    <div id="resource-results">${initial.html}</div>`
 
   const search = host.querySelector<HTMLInputElement>('#resource-search')!
   const results = host.querySelector('#resource-results')!

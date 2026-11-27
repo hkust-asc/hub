@@ -16,8 +16,8 @@
       "source": "HKUST ASC",
       "use": "Revisit the curriculum introduction, remote development workflow, and the discussion of MPI and GPU performance.",
       "topics": ["SSH", "parallel computing", "AI-assisted development"],
-      "memberZoomReplay": true,
       "links": [
+        { "label": "Recording (Zoom)", "href": "https://hkust.zoom.us/rec/share/-rWx6e3vcnjew8FTs95JCzxAeGQ43RTvtSwe8rfNVHvPcbHQexymOpXQMzlfvYqN.URSKGr1NaDNPQzY6", "format": "recording" },
         { "label": "Curriculum site", "href": "https://hkust-asc.github.io/asc27-curriculum/" },
         { "label": "Related ASC27 slides (PDF)", "href": "https://github.com/hkust-asc/asc27-curriculum/blob/main/slides/pdf/02-stage2-parallelism.pdf", "format": "slides" },
         { "label": "Related MPI exercises (PDF)", "href": "https://github.com/EPCCed/archer2-MPI-2022-03-23/blob/master/exercises/MPP-exercises.pdf", "format": "slides" }
@@ -31,8 +31,8 @@
       "source": "HKUST ASC",
       "use": "Revisit shell navigation, output redirection, tmux, and the branch-to-PR workflow before starting the quests.",
       "topics": ["SSH", "command line"],
-      "memberZoomReplay": true,
       "links": [
+        { "label": "Recording (Zoom)", "href": "https://hkust.zoom.us/rec/share/qIqaWpakxAbEpzctIfpjZL5qZSOcNL8V76g3iuqHcUxiFrf4xv2jzeNC-gZ7fLQ.x_ahFJg8Dyi-xzhS", "format": "recording" },
         { "label": "Session outline", "href": "https://github.com/hkust-asc/ws26-01-linux-git/blob/main/slides/week1-slides.md#todays-roadmap-90-mins", "format": "summary" },
         { "label": "Slides (Markdown)", "href": "https://github.com/hkust-asc/ws26-01-linux-git/blob/main/slides/week1-slides.md", "format": "slides" },
         { "label": "Workshop exercises", "href": "https://github.com/hkust-asc/ws26-01-linux-git#quest-1-connect-and-explore" },
@@ -45,7 +45,7 @@
       "id": "archer2",
       "title": "ARCHER2 training",
       "source": "ARCHER2 / EPCC",
-      "use": "Browse public training on Slurm scheduling, OpenMP GPU offload, and MPI. The examples use ARCHER2, not HPC4.",
+      "use": "Browse public training on Slurm scheduling, OpenMP GPU offload, and MPI. The examples use ARCHER2.",
       "courses": [
         {
           "id": "gpu-openmp-2026",
@@ -63,7 +63,7 @@
           "id": "slurm-2023",
           "date": "2023-07-26",
           "title": "Slurm job scheduling",
-          "use": "See what happens after you submit a batch job. The examples use ARCHER2, not HPC4.",
+          "use": "See what happens after you submit a batch job. The examples use ARCHER2.",
           "topics": ["sbatch", "job submission", "queues"],
           "links": [
             { "label": "Recording", "href": "https://www.youtube.com/watch?v=p5t1vXPdi5A", "format": "recording" },
@@ -116,7 +116,7 @@
     {
       "title": "Environment modules guide",
       "source": "University of Utah CHPC",
-      "use": "Learn to discover and load software with Lmod. Package names and examples are specific to Utah, not HPC4.",
+      "use": "Learn to discover and load software with Lmod. Package names and examples are specific to Utah.",
       "topics": ["module load", "module spider"],
       "href": "https://www.chpc.utah.edu/documentation/software/modules.php"
     },

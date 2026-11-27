@@ -23,7 +23,6 @@ export interface ResourceEntry extends ResourceInfo {
 export interface WorkshopResource extends ResourceEntry {
   id: string
   weekId?: string
-  memberZoomReplay?: boolean
 }
 
 interface ResourceCollection extends ResourceInfo {
