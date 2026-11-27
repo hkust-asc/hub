@@ -39,6 +39,18 @@ jobs:
             node scripts/check-state-machines.ts
           fi
 
+      - name: Cache TLC and Java runtime for formal checks
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hub-formal
+          key: hub-formal-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('formal/check.sh') }}
+
+      - name: Verify TLA+ models
+        run: |
+          if [ -f formal/check.sh ]; then
+            bash formal/check.sh
+          fi
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
